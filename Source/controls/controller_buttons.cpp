@@ -262,6 +262,8 @@ string_view ToGenericButtonText(ControllerButton button)
 		return "RS";
 	case devilution::ControllerButton_BUTTON_MENU:
 		return "Menu";
+	case devilution::ControllerButton_BUTTON_POWER:
+		return "Power";
 	case devilution::ControllerButton_BUTTON_VOLUME_UP:
 		return "Volume Up";
 	case devilution::ControllerButton_BUTTON_VOLUME_DOWN:
@@ -310,8 +312,8 @@ string_view ToGenericButtonText2(ControllerButton button)
 		return "LS";
 	case devilution::ControllerButton_BUTTON_RIGHTSTICK:
 		return "RS";
-	case devilution::ControllerButton_BUTTON_MENU:
-		return "Menu";
+	case devilution::ControllerButton_BUTTON_POWER:
+		return "Power";
 	case devilution::ControllerButton_BUTTON_VOLUME_UP:
 		return "Volume Up";
 	case devilution::ControllerButton_BUTTON_VOLUME_DOWN:

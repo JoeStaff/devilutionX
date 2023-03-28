@@ -29,6 +29,7 @@ enum ControllerButton : uint8_t {
 	ControllerButton_BUTTON_DPAD_DOWN,
 	ControllerButton_BUTTON_DPAD_LEFT,
 	ControllerButton_BUTTON_DPAD_RIGHT,
+	ControllerButton_BUTTON_POWER,
 	ControllerButton_BUTTON_MENU,
 	ControllerButton_BUTTON_VOLUME_UP,
 	ControllerButton_BUTTON_VOLUME_DOWN,

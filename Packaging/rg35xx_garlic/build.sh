@@ -20,6 +20,7 @@ cmake_configure() {
 	cmake -S. -B"$BUILD_DIR" \
 		-DTARGET_PLATFORM=rg35xx_garlic \
 		-DCMAKE_BUILD_TYPE=Release \
+		-DVERSION_NUM=1.4.1\
 		-DCMAKE_TOOLCHAIN_FILE="${PACKAGING_DIR}/toolchainfile.cmake" \
 		-DBUILD_TESTING=OFF \
 		"$@"

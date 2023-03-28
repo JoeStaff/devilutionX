@@ -74,6 +74,10 @@ StaticVector<ControllerButtonEvent, 4> Joystick::ToControllerButtonEvents(const 
 		case JOY_BUTTON_MENU:
 			return { ControllerButtonEvent { ControllerButton_BUTTON_MENU, up } };
 #endif
+#ifdef JOY_BUTTON_POWER
+		case JOY_BUTTON_POWER:
+			return { ControllerButtonEvent { ControllerButton_BUTTON_POWER, up } };
+#endif
 #ifdef JOY_BUTTON_VOLUME_UP
 		case JOY_BUTTON_VOLUME_UP:
 			if(up)increasevolume();
@@ -265,6 +269,10 @@ int Joystick::ToSdlJoyButton(ControllerButton button)
 #ifdef JOY_BUTTON_MENU
 		case ControllerButton_BUTTON_MENU:
 			return JOY_BUTTON_MENU;
+#endif
+#ifdef JOY_BUTTON_POWER
+		case ControllerButton_BUTTON_POWER:
+			return JOY_BUTTON_POWER;
 #endif
 #ifdef JOY_BUTTON_VOLUME_UP
 		case ControllerButton_BUTTON_VOLUME_UP:
