@@ -118,7 +118,6 @@ StaticVector<ControllerButtonEvent, 4> Joystick::ToControllerButtonEvents(const 
 	}
 	case SDL_JOYAXISMOTION:
 	{
-		printf("Axis Motion: %d = value: %d\n",event.jaxis.axis,event.jaxis.value);
 		switch(event.jaxis.axis){
 			#ifdef JOY_AXIS_LEFTTRIGGER
 				case JOY_AXIS_LEFTTRIGGER:{
