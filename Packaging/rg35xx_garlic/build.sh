@@ -11,6 +11,7 @@ main() {
 	cd "$PACKAGING_DIR/../.."
 
 	rm -f "$BUILD_DIR/CMakeCache.txt"
+	rm -rf "$BUILD_DIR/GarlicOS"
 	cmake_configure -DCMAKE_BUILD_TYPE=Release
 	cmake_build
 	package_garlic
@@ -36,7 +37,7 @@ prepare_garlic_skeleton() {
 	cp -rf  Packaging/rg35xx_garlic/skeleton_GarlicOS/* $BUILD_DIR/GarlicOS
 
 	# ensure devilutionx asset dir
-	mkdir -p $BUILD_DIR/GarlicOS/ROMS/PORTS/Diablo/assets
+	mkdir -p $BUILD_DIR/GarlicOS/Roms/PORTS/Diablo/assets
 
 	# ensure lib dir for custom SDL -- Not Needed
 	#mkdir -p $BUILD_DIR/GarlicOS/ROMS/PORTS/Diablo/lib
@@ -45,9 +46,9 @@ prepare_garlic_skeleton() {
 package_garlic() {
 	prepare_garlic_skeleton
 	# copy assets
-	cp -rf $BUILD_DIR/assets/* $BUILD_DIR/GarlicOS/ROMS/PORTS/Diablo/assets
+	cp -rf $BUILD_DIR/assets/* $BUILD_DIR/GarlicOS/Roms/PORTS/Diablo/assets
 	# copy executable
-	cp -f $BUILD_DIR/devilutionx $BUILD_DIR/GarlicOS/ROMS/PORTS/Diablo/devilutionx
+	cp -f $BUILD_DIR/devilutionx $BUILD_DIR/GarlicOS/Roms/PORTS/Diablo/devilutionx
 	# copy SDL1.2 -- EDIT: Apparently not needed
 	# cp -rfL "/opt/miyoo/lib/libSDL-1.2.so.0" "$BUILD_DIR/GarlicOS/Roms/PORTS/Diablo/lib/libSDL-1.2.so.0"
 
