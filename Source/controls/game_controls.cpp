@@ -303,7 +303,7 @@ void PressControllerButton(ControllerButton button)
 
 ControllerButton TranslateTo(GamepadLayout layout, ControllerButton button)
 {
-	if (layout != GamepadLayout::Nintendo)
+	if (layout != GamepadLayout::Nintendo && layout != GamepadLayout::Generic2)
 		return button;
 
 	switch (button) {
