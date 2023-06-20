@@ -3,10 +3,14 @@
  *
  * Implementation of routines for initializing the environment, disable screen saver, load MPQ.
  */
-#include <SDL.h>
-#include <config.h>
+#include "init.h"
+
+#include <cstdint>
 #include <string>
 #include <vector>
+
+#include <SDL.h>
+#include <config.h>
 
 #if (defined(_WIN64) || defined(_WIN32)) && !defined(__UWP__) && !defined(NXDK)
 #include <find_steam_game.h>
@@ -331,13 +335,13 @@ void MainWndProc(const SDL_Event &event)
 		return;
 	switch (event.window.event) {
 	case SDL_WINDOWEVENT_HIDDEN:
+	case SDL_WINDOWEVENT_MINIMIZED:
 		gbActive = false;
 		break;
 	case SDL_WINDOWEVENT_SHOWN:
-		gbActive = false;
-		RedrawEverything();
-		break;
 	case SDL_WINDOWEVENT_EXPOSED:
+	case SDL_WINDOWEVENT_RESTORED:
+		gbActive = true;
 		RedrawEverything();
 		break;
 	case SDL_WINDOWEVENT_SIZE_CHANGED:

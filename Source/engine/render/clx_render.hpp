@@ -10,6 +10,10 @@
 #include <array>
 #include <utility>
 
+#ifdef DEBUG_CLX
+#include <string>
+#endif
+
 #include "engine.h"
 #include "engine/clx_sprite.hpp"
 #include "engine/point.hpp"
@@ -90,7 +94,7 @@ extern int LightTableIndex;
 inline void ClxDrawLight(const Surface &out, Point position, ClxSprite clx)
 {
 	if (LightTableIndex != 0)
-		ClxDrawTRN(out, position, clx, &LightTables[LightTableIndex * 256]);
+		ClxDrawTRN(out, position, clx, LightTables[LightTableIndex].data());
 	else
 		ClxDraw(out, position, clx);
 }
@@ -103,7 +107,7 @@ inline void ClxDrawLight(const Surface &out, Point position, ClxSprite clx)
  */
 inline void ClxDrawLightBlended(const Surface &out, Point position, ClxSprite clx)
 {
-	ClxDrawBlendedTRN(out, position, clx, &LightTables[LightTableIndex * 256]);
+	ClxDrawBlendedTRN(out, position, clx, LightTables[LightTableIndex].data());
 }
 
 /**
@@ -111,5 +115,9 @@ inline void ClxDrawLightBlended(const Surface &out, Point position, ClxSprite cl
  * of fully transparent columns in the sprite.
  */
 std::pair<int, int> ClxMeasureSolidHorizontalBounds(ClxSprite clx);
+
+#ifdef DEBUG_CLX
+std::string ClxDescribe(ClxSprite clx);
+#endif
 
 } // namespace devilution

@@ -33,7 +33,7 @@ constexpr int InventoryGridCells = 40;
 constexpr int MaxBeltItems = 8;
 constexpr int MaxResistance = 75;
 constexpr int MaxCharacterLevel = 50;
-constexpr int MaxSpellLevel = 15;
+constexpr uint8_t MaxSpellLevel = 15;
 constexpr int PlayerNameLength = 32;
 
 constexpr size_t NumHotkeys = 12;
@@ -162,6 +162,16 @@ enum class SpellFlag : uint8_t {
 };
 use_enum_as_flags(SpellFlag);
 
+/* @brief When the player dies, what is the reason/source why? */
+enum class DeathReason {
+	/* @brief Monster or Trap (dungeon) */
+	MonsterOrTrap,
+	/* @brief Other player or selfkill (for example firewall) */
+	Player,
+	/* @brief HP is zero but we don't know when or where this happend */
+	Unknown,
+};
+
 /** Maps from armor animation to letter used in graphic files. */
 constexpr std::array<char, 4> ArmourChar = {
 	'l', // light
@@ -226,8 +236,7 @@ struct Player {
 	Item SpdList[MaxBeltItems];
 	Item HoldItem;
 
-	int _plid;
-	int _pvid;
+	int lightId;
 
 	int _pNumInv;
 	int _pStrength;
@@ -322,11 +331,14 @@ struct Player {
 	SpellCastInfo queuedSpell;
 	/** @brief The spell that is currently being cast */
 	SpellCastInfo executedSpell;
-	SpellID _pTSpell;
+	/* @brief Which spell should be executed with CURSOR_TELEPORT */
+	SpellID inventorySpell;
+	/* @brief Inventory location for scrolls with CURSOR_TELEPORT */
+	int8_t spellFrom;
 	SpellID _pRSpell;
 	SpellType _pRSplType;
 	SpellID _pSBkSpell;
-	int8_t _pSplLvl[64];
+	uint8_t _pSplLvl[64];
 	/** @brief Bitmask of staff spell */
 	uint64_t _pISpells;
 	/** @brief Bitmask of learned spells */
@@ -446,6 +458,11 @@ struct Player {
 	 * @brief Get the tile coordinates a player is moving to (if not moving, then it corresponds to current position).
 	 */
 	Point GetTargetPosition() const;
+
+	/**
+	 * @brief Check if position is in player's path.
+	 */
+	bool IsPositionInPath(Point position);
 
 	/**
 	 * @brief Says a speech line.
@@ -581,7 +598,7 @@ struct Player {
 			return 0;
 		}
 
-		return std::max<int8_t>(_pISplLvlAdd + _pSplLvl[static_cast<std::size_t>(spell)], 0);
+		return std::max<int>(_pISplLvlAdd + _pSplLvl[static_cast<std::size_t>(spell)], 0);
 	}
 
 	/**
@@ -683,8 +700,9 @@ struct Player {
 	/**
 	 * @brief Sets the readied spell to the spell in the specified equipment slot. Does nothing if the item does not have a valid spell.
 	 * @param bodyLocation - the body location whose item will be checked for the spell.
+	 * @param forceSpell - if true, always change active spell, if false, only when current spell slot is empty
 	 */
-	void ReadySpellFromEquipment(inv_body_loc bodyLocation);
+	void ReadySpellFromEquipment(inv_body_loc bodyLocation, bool forceSpell);
 
 	/**
 	 * @brief Does the player currently have a ranged weapon equipped?
@@ -762,6 +780,13 @@ struct Player {
 extern DVL_API_FOR_TEST size_t MyPlayerId;
 extern DVL_API_FOR_TEST Player *MyPlayer;
 extern DVL_API_FOR_TEST std::vector<Player> Players;
+/** @brief What Player items and stats should be displayed? Normally this is identical to MyPlayer but can differ when /inspect was used. */
+extern Player *InspectPlayer;
+/** @brief Do we currently inspect a remote player (/inspect was used)? In this case the (remote) players items and stats can't be modified. */
+inline bool IsInspectingPlayer()
+{
+	return MyPlayer != InspectPlayer;
+}
 extern bool MyPlayerIsDead;
 
 Player *PlayerAtPosition(Point position);
@@ -790,7 +815,7 @@ void NextPlrLevel(Player &player);
 #endif
 void AddPlrExperience(Player &player, int lvl, int exp);
 void AddPlrMonstExper(int lvl, int exp, char pmask);
-void ApplyPlrDamage(DamageType damageType, Player &player, int dam, int minHP = 0, int frac = 0, int earflag = 0);
+void ApplyPlrDamage(DamageType damageType, Player &player, int dam, int minHP = 0, int frac = 0, DeathReason deathReason = DeathReason::MonsterOrTrap);
 void InitPlayer(Player &player, bool FirstTime);
 void InitMultiView();
 void PlrClrTrans(Point position);
@@ -801,12 +826,12 @@ void StartStand(Player &player, Direction dir);
 void StartPlrBlock(Player &player, Direction dir);
 void FixPlrWalkTags(const Player &player);
 void StartPlrHit(Player &player, int dam, bool forcehit);
-void StartPlayerKill(Player &player, int earflag);
+void StartPlayerKill(Player &player, DeathReason deathReason);
 /**
  * @brief Strip the top off gold piles that are larger than MaxGold
  */
 void StripTopGold(Player &player);
-void SyncPlrKill(Player &player, int earflag);
+void SyncPlrKill(Player &player, DeathReason deathReason);
 void RemovePlrMissiles(const Player &player);
 void StartNewLvl(Player &player, interface_mode fom, int lvl);
 void RestartTownLvl(Player &player);
@@ -832,12 +857,5 @@ void SetPlrDex(Player &player, int v);
 void SetPlrVit(Player &player, int v);
 void InitDungMsgs(Player &player);
 void PlayDungMsgs();
-
-/* data */
-
-extern const int8_t plrxoff[9];
-extern const int8_t plryoff[9];
-extern const int8_t plrxoff2[9];
-extern const int8_t plryoff2[9];
 
 } // namespace devilution

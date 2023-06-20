@@ -5,6 +5,8 @@
  */
 #include "quests.h"
 
+#include <cstdint>
+
 #include <fmt/format.h>
 
 #include "DiabloUI/ui_flags.hpp"
@@ -355,13 +357,15 @@ void CheckQuests()
 	}
 
 	if (setlevel) {
-		if (setlvlnum == Quests[Q_PWATER]._qslvl
-		    && Quests[Q_PWATER]._qactive != QUEST_INIT
-		    && leveltype == Quests[Q_PWATER]._qlvltype
+		Quest &poisonWater = Quests[Q_PWATER];
+		if (setlvlnum == poisonWater._qslvl
+		    && poisonWater._qactive != QUEST_INIT
+		    && leveltype == poisonWater._qlvltype
 		    && ActiveMonsterCount == 4
-		    && Quests[Q_PWATER]._qactive != QUEST_DONE) {
-			Quests[Q_PWATER]._qactive = QUEST_DONE;
-			NetSendCmdQuest(true, Quests[Q_PWATER]);
+		    && poisonWater._qactive != QUEST_DONE) {
+			poisonWater._qactive = QUEST_DONE;
+			poisonWater._qlog = true; // even if the player skips talking to Pepin completely they should at least notice the water being purified once they cleanse the level
+			NetSendCmdQuest(true, poisonWater);
 			StartPWaterPurify();
 		}
 	} else if (MyPlayer->_pmode == PM_STAND) {
@@ -449,14 +453,14 @@ void CheckQuestKill(const Monster &monster, bool sendmsg)
 					}
 				}
 			}
-			if (sendmsg) {
-				NetSendCmdQuest(true, betrayerQuest);
-				NetSendCmdQuest(true, diabloQuest);
-			}
 		} else {
 			InitVPTriggers();
 			betrayerQuest._qvar2 = 4;
 			AddMissile({ 35, 32 }, { 35, 32 }, Direction::South, MissileID::RedPortal, TARGET_MONSTERS, MyPlayerId, 0, 0);
+		}
+		if (sendmsg) {
+			NetSendCmdQuest(true, betrayerQuest);
+			NetSendCmdQuest(true, diabloQuest);
 		}
 	} else if (monster.uniqueType == UniqueMonsterType::WarlordOfBlood) {
 		Quests[Q_WARLORD]._qactive = QUEST_DONE;
@@ -526,7 +530,7 @@ Point GetMapReturnPosition()
 	case SL_VILEBETRAYER:
 		return Quests[Q_BETRAYER].position + Direction::South;
 	default:
-		return Towners[TOWN_DRUNK].position + Displacement { 1, 0 };
+		return GetTowner(TOWN_DRUNK)->position + Direction::SouthEast;
 	}
 }
 
@@ -603,6 +607,8 @@ void ResyncQuests()
 {
 	if (gbIsSpawn)
 		return;
+
+	LoadingMapObjects = true;
 
 	if (Quests[Q_LTBANNER].IsAvailable()) {
 		Monster *snotSpill = FindUniqueMonster(UniqueMonsterType::SnotSpill);
@@ -787,6 +793,8 @@ void ResyncQuests()
 			}
 		}
 	}
+
+	LoadingMapObjects = false;
 }
 
 void DrawQuestLog(const Surface &out)
@@ -909,7 +917,7 @@ void SetMultiQuest(int q, quest_state s, bool log, int v1, int v2, int16_t qmsg)
 	auto &quest = Quests[q];
 	quest_state oldQuestState = quest._qactive;
 	if (quest._qactive != QUEST_DONE) {
-		if (s > quest._qactive)
+		if (s > quest._qactive || (IsAnyOf(s, QUEST_ACTIVE, QUEST_DONE) && IsAnyOf(quest._qactive, QUEST_HIVE_TEASE1, QUEST_HIVE_TEASE2, QUEST_HIVE_ACTIVE)))
 			quest._qactive = s;
 		if (log)
 			quest._qlog = true;
@@ -922,9 +930,14 @@ void SetMultiQuest(int q, quest_state s, bool log, int v1, int v2, int16_t qmsg)
 		// Ensure that changes on another client is also updated on our own
 		ResyncQuests();
 
+		bool questGotCompleted = oldQuestState != QUEST_DONE && quest._qactive == QUEST_DONE;
 		// Ensure that water also changes for remote players
-		if (quest._qidx == Q_PWATER && oldQuestState == QUEST_ACTIVE && quest._qactive == QUEST_DONE && MyPlayer->isOnLevel(quest._qslvl))
+		if (quest._qidx == Q_PWATER && questGotCompleted && MyPlayer->isOnLevel(quest._qslvl))
 			StartPWaterPurify();
+		if (quest._qidx == Q_GIRL && questGotCompleted && MyPlayer->isOnLevel(0))
+			UpdateGirlAnimAfterQuestComplete();
+		if (quest._qidx == Q_JERSEY && questGotCompleted && MyPlayer->isOnLevel(0))
+			UpdateCowFarmerAnimAfterQuestComplete();
 	}
 }
 

@@ -27,12 +27,12 @@ namespace {
 struct ItemLabel {
 	int id, width;
 	Point pos;
-	std::string text;
+	StringOrView text;
 };
 
 std::vector<ItemLabel> labelQueue;
 
-bool altPressed = false;
+bool highlightKeyPressed = false;
 bool isLabelHighlighted = false;
 std::array<std::optional<int>, ITEMTYPES> labelCenterOffsets;
 
@@ -74,9 +74,9 @@ void ToggleItemLabelHighlight()
 	sgOptions.Gameplay.showItemLabels.SetValue(!*sgOptions.Gameplay.showItemLabels);
 }
 
-void AltPressed(bool pressed)
+void HighlightKeyPressed(bool pressed)
 {
-	altPressed = pressed;
+	highlightKeyPressed = pressed;
 }
 
 bool IsItemLabelHighlighted()
@@ -91,7 +91,7 @@ void ResetItemlabelHighlighted()
 
 bool IsHighlightingLabelsEnabled()
 {
-	return stextflag == TalkID::None && altPressed != *sgOptions.Gameplay.showItemLabels;
+	return stextflag == TalkID::None && highlightKeyPressed != *sgOptions.Gameplay.showItemLabels;
 }
 
 void AddItemToLabelQueue(int id, Point position)
@@ -100,11 +100,11 @@ void AddItemToLabelQueue(int id, Point position)
 		return;
 	Item &item = Items[id];
 
-	std::string textOnGround;
+	StringOrView textOnGround;
 	if (item._itype == ItemType::Gold) {
 		textOnGround = fmt::format(fmt::runtime(_("{:s} gold")), FormatInteger(item._ivalue));
 	} else {
-		textOnGround = item._iIdentified ? item._iIName : item._iName;
+		textOnGround = item.getName();
 	}
 
 	int nameWidth = GetLineWidth(textOnGround);
@@ -122,7 +122,7 @@ void AddItemToLabelQueue(int id, Point position)
 	}
 	position.x -= nameWidth / 2;
 	position.y -= Height;
-	labelQueue.push_back(ItemLabel { id, nameWidth, position, textOnGround });
+	labelQueue.push_back(ItemLabel { id, nameWidth, position, std::move(textOnGround) });
 }
 
 bool IsMouseOverGameArea()

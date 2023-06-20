@@ -257,7 +257,7 @@ void PackPlayerTest(PlayerPack *pPack)
 
 void AssertPlayer(Player &player)
 {
-	ASSERT_EQ(Count8(player._pSplLvl, 64), 23);
+	ASSERT_EQ(CountU8(player._pSplLvl, 64), 23);
 	ASSERT_EQ(Count8(player.InvGrid, InventoryGridCells), 9);
 	ASSERT_EQ(CountItems(player.InvBody, NUM_INVLOC), 6);
 	ASSERT_EQ(CountItems(player.InvList, InventoryGridCells), 2);
@@ -312,7 +312,7 @@ void AssertPlayer(Player &player)
 	ASSERT_EQ(player.queuedSpell.spellId, SpellID::Invalid);
 	ASSERT_EQ(player.queuedSpell.spellType, SpellType::Invalid);
 	ASSERT_EQ(player.queuedSpell.spellFrom, 0);
-	ASSERT_EQ(player._pTSpell, SpellID::Null);
+	ASSERT_EQ(player.inventorySpell, SpellID::Null);
 	ASSERT_EQ(player._pRSpell, SpellID::Invalid);
 	ASSERT_EQ(player._pRSplType, SpellType::Invalid);
 	ASSERT_EQ(player._pSBkSpell, SpellID::Invalid);
@@ -327,7 +327,7 @@ void AssertPlayer(Player &player)
 	ASSERT_EQ(player._pMaxHP, 16640);
 	ASSERT_EQ(player._pMana, 14624);
 	ASSERT_EQ(player._pMaxMana, 14624);
-	ASSERT_EQ(player._pNextExper, 1583495809);
+	ASSERT_EQ(player._pNextExper, 1310707109);
 	ASSERT_EQ(player._pMagResist, 75);
 	ASSERT_EQ(player._pFireResist, 16);
 	ASSERT_EQ(player._pLghtResist, 75);

@@ -6,6 +6,7 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <vector>
 
 #include <function_ref.hpp>
@@ -20,58 +21,60 @@
 namespace devilution {
 
 #define MAXLIGHTS 32
-#define MAXVISION 32
-/** 16 light levels + infravision + stone curse + red for pause/death screen */
-#define LIGHTSIZE (19 * 256)
+#define MAXVISION 4
+/** @brief Number of supported light levels */
+constexpr size_t NumLightingLevels = 16;
 #define NO_LIGHT -1
 
 struct LightPosition {
-	Point tile;
+	WorldTilePosition tile;
 	/** Pixel offset from tile. */
-	Displacement offset;
-	/** Prevous position. */
-	Point old;
+	DisplacementOf<int8_t> offset;
+	/** Previous position. */
+	WorldTilePosition old;
 };
 
 struct Light {
 	LightPosition position;
-	int _lradius;
-	int _lid;
-	bool _ldel;
-	bool _lunflag;
-	int oldRadius;
-	bool _lflags;
+	uint8_t radius;
+	uint8_t oldRadius;
+	bool isInvalid;
+	bool hasChanged;
 };
 
 extern Light VisionList[MAXVISION];
-extern int VisionCount;
-extern int VisionId;
+extern std::array<bool, MAXVISION> VisionActive;
 extern Light Lights[MAXLIGHTS];
-extern uint8_t ActiveLights[MAXLIGHTS];
+extern std::array<uint8_t, MAXLIGHTS> ActiveLights;
 extern int ActiveLightCount;
 constexpr char LightsMax = 15;
-extern std::array<uint8_t, LIGHTSIZE> LightTables;
+extern std::array<std::array<uint8_t, 256>, NumLightingLevels> LightTables;
+extern std::array<uint8_t, 256> InfravisionTable;
+extern std::array<uint8_t, 256> StoneTable;
+extern std::array<uint8_t, 256> PauseTable;
+#ifdef _DEBUG
 extern bool DisableLighting;
+#endif
 extern bool UpdateLighting;
 
-void DoLighting(Point position, int nRadius, int Lnum);
-void DoUnVision(Point position, int nRadius);
-void DoVision(Point position, int radius, MapExplorationType doAutomap, bool visible);
+void DoUnLight(Point position, uint8_t radius);
+void DoLighting(Point position, uint8_t radius, DisplacementOf<int8_t> offset);
+void DoUnVision(Point position, uint8_t radius);
+void DoVision(Point position, uint8_t radius, MapExplorationType doAutomap, bool visible);
 void MakeLightTable();
 #ifdef _DEBUG
 void ToggleLighting();
 #endif
 void InitLighting();
-int AddLight(Point position, int r);
+int AddLight(Point position, uint8_t radius);
 void AddUnLight(int i);
-void ChangeLightRadius(int i, int r);
+void ChangeLightRadius(int i, uint8_t radius);
 void ChangeLightXY(int i, Point position);
-void ChangeLightOffset(int i, Displacement offset);
-void ChangeLight(int i, Point position, int r);
+void ChangeLightOffset(int i, DisplacementOf<int8_t> offset);
+void ChangeLight(int i, Point position, uint8_t radius);
 void ProcessLightList();
 void SavePreLighting();
-void InitVision();
-int AddVision(Point position, int r, bool mine);
+void ActivateVision(Point position, int r, int id);
 void ChangeVisionRadius(int id, int r);
 void ChangeVisionXY(int id, Point position);
 void ProcessVisionList();

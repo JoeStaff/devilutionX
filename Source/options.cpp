@@ -1021,6 +1021,9 @@ std::vector<OptionEntryBase *> GraphicsOptions::GetEntries()
 #if !defined(USE_SDL1) || defined(__3DS__)
 		&fitToScreen,
 #endif
+		&showItemGraphicsInStores,
+		&showHealthValues,
+		&showManaValues,
 #ifndef USE_SDL1
 		&upscale,
 		&scaleQuality,
@@ -1031,9 +1034,6 @@ std::vector<OptionEntryBase *> GraphicsOptions::GetEntries()
 		&zoom,
 		&limitFPS,
 		&showFPS,
-		&showItemGraphicsInStores,
-		&showHealthValues,
-		&showManaValues,
 		&colorCycling,
 		&alternateNestArt,
 #if SDL_VERSION_ATLEAST(2, 0, 0)
@@ -1095,39 +1095,39 @@ std::vector<OptionEntryBase *> GameplayOptions::GetEntries()
 {
 	return {
 		&tickRate,
-		&grabInput,
-		&runInTown,
-		&adriaRefillsMana,
+		&friendlyFire,
+		&multiplayerFullQuests,
 		&randomizeQuests,
 		&theoQuest,
 		&cowQuest,
-		&friendlyFire,
-		&multiplayerFullQuests,
+		&runInTown,
+		&quickCast,
 		&testBard,
 		&testBarbarian,
 		&experienceBar,
 		&enemyHealthBar,
 		&showMonsterType,
 		&showItemLabels,
-		&disableCripplingShrines,
-		&quickCast,
+		&enableFloatingNumbers,
 		&autoRefillBelt,
-		&autoPickupInTown,
-		&autoGoldPickup,
-		&autoElixirPickup,
-		&autoOilPickup,
 		&autoEquipWeapons,
 		&autoEquipArmor,
 		&autoEquipHelms,
 		&autoEquipShields,
 		&autoEquipJewelry,
+		&autoGoldPickup,
+		&autoElixirPickup,
+		&autoOilPickup,
 		&numHealPotionPickup,
 		&numFullHealPotionPickup,
 		&numManaPotionPickup,
 		&numFullManaPotionPickup,
 		&numRejuPotionPickup,
 		&numFullRejuPotionPickup,
-		&enableFloatingNumbers,
+		&autoPickupInTown,
+		&disableCripplingShrines,
+		&adriaRefillsMana,
+		&grabInput,
 	};
 }
 
@@ -1463,20 +1463,33 @@ void KeymapperOptions::KeyPressed(uint32_t key) const
 	action.actionPressed();
 }
 
-void KeymapperOptions::KeyReleased(uint32_t key) const
+void KeymapperOptions::KeyReleased(SDL_Keycode key) const
 {
+	if (key >= SDLK_a && key <= SDLK_z) {
+		key = static_cast<SDL_Keycode>(static_cast<Sint32>(key) - ('a' - 'A'));
+	}
 	auto it = keyIDToAction.find(key);
 	if (it == keyIDToAction.end())
 		return; // Ignore unmapped keys.
 
 	const Action &action = it->second.get();
 
-	// Check that the action can be triggered and that the chat textbox is not
-	// open.
-	if (!action.actionReleased || (action.enable && !action.enable()) || talkflag)
+	// Check that the action can be triggered and that the chat or gold textbox is not
+	// open. If either of those textboxes are open, only return if the key can be used for entry into the box
+	if (!action.actionReleased || (action.enable && !action.enable()) || ((talkflag && IsTextEntryKey(key)) || (dropGoldFlag && IsNumberEntryKey(key))))
 		return;
 
 	action.actionReleased();
+}
+
+bool KeymapperOptions::IsTextEntryKey(SDL_Keycode vkey) const
+{
+	return IsAnyOf(vkey, SDLK_ESCAPE, SDLK_RETURN, SDLK_KP_ENTER, SDLK_BACKSPACE, SDLK_DOWN, SDLK_UP) || (vkey >= SDLK_SPACE && vkey <= SDLK_z);
+}
+
+bool KeymapperOptions::IsNumberEntryKey(SDL_Keycode vkey) const
+{
+	return ((vkey >= SDLK_0 && vkey <= SDLK_9) || vkey == SDLK_BACKSPACE);
 }
 
 string_view KeymapperOptions::KeyNameForAction(string_view actionName) const
@@ -1637,22 +1650,44 @@ void PadmapperOptions::Action::UpdateValueDescription() const
 	boundInputDescriptionType = GamepadType;
 	if (boundInput.button == ControllerButton_NONE) {
 		boundInputDescription = "";
+		boundInputShortDescription = "";
 		return;
 	}
 	string_view buttonName = ToString(boundInput.button);
 	if (boundInput.modifier == ControllerButton_NONE) {
 		boundInputDescription = std::string(buttonName);
+		boundInputShortDescription = std::string(Shorten(buttonName));
 		return;
 	}
 	string_view modifierName = ToString(boundInput.modifier);
 	boundInputDescription = StrCat(modifierName, "+", buttonName);
+	boundInputShortDescription = StrCat(Shorten(modifierName), "+", Shorten(buttonName));
+}
+
+string_view PadmapperOptions::Action::Shorten(string_view buttonName) const
+{
+	size_t index = 0;
+	size_t chars = 0;
+	while (index < buttonName.size()) {
+		if (!IsTrailUtf8CodeUnit(buttonName[index]))
+			chars++;
+		if (chars == 3)
+			break;
+		index++;
+	}
+	return string_view(buttonName.data(), index);
 }
 
 string_view PadmapperOptions::Action::GetValueDescription() const
 {
+	return GetValueDescription(false);
+}
+
+string_view PadmapperOptions::Action::GetValueDescription(bool useShortName) const
+{
 	if (GamepadType != boundInputDescriptionType)
 		UpdateValueDescription();
-	return boundInputDescription;
+	return useShortName ? boundInputShortDescription : boundInputDescription;
 }
 
 bool PadmapperOptions::Action::SetValue(ControllerButtonCombo value)
@@ -1684,6 +1719,8 @@ void PadmapperOptions::ButtonPressed(ControllerButton button)
 {
 	const Action *action = FindAction(button);
 	if (action == nullptr)
+		return;
+	if (IsMovementHandlerActive() && CanDeferToMovementHandler(*action))
 		return;
 	if (action->actionPressed)
 		action->actionPressed();
@@ -1741,11 +1778,11 @@ string_view PadmapperOptions::ActionNameTriggeredByButtonEvent(ControllerButtonE
 	return releaseAction->key;
 }
 
-string_view PadmapperOptions::InputNameForAction(string_view actionName) const
+string_view PadmapperOptions::InputNameForAction(string_view actionName, bool useShortName) const
 {
 	for (const Action &action : actions) {
 		if (action.key == actionName && action.boundInput.button != ControllerButton_NONE) {
-			return action.GetValueDescription();
+			return action.GetValueDescription(useShortName);
 		}
 	}
 	return "";
@@ -1790,6 +1827,28 @@ const PadmapperOptions::Action *PadmapperOptions::FindAction(ControllerButton bu
 	}
 
 	return nullptr;
+}
+
+bool PadmapperOptions::CanDeferToMovementHandler(const Action &action) const
+{
+	if (action.boundInput.modifier != ControllerButton_NONE)
+		return false;
+
+	if (spselflag) {
+		const string_view prefix { "QuickSpell" };
+		const string_view key { action.key };
+		if (key.size() >= prefix.size()) {
+			const string_view truncated { key.data(), prefix.size() };
+			if (truncated == prefix)
+				return false;
+		}
+	}
+
+	return IsAnyOf(action.boundInput.button,
+	    ControllerButton_BUTTON_DPAD_UP,
+	    ControllerButton_BUTTON_DPAD_DOWN,
+	    ControllerButton_BUTTON_DPAD_LEFT,
+	    ControllerButton_BUTTON_DPAD_RIGHT);
 }
 
 namespace {

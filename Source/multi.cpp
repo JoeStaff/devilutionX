@@ -4,10 +4,11 @@
  * Implementation of functions for keeping multiplaye games in sync.
  */
 
+#include <cstdint>
+#include <ctime>
+
 #include <SDL.h>
 #include <config.h>
-
-#include <ctime>
 #include <fmt/format.h>
 
 #include "DiabloUI/diabloui.h"
@@ -34,11 +35,11 @@
 namespace devilution {
 
 bool gbSomebodyWonGameKludge;
-TBuffer sgHiPriBuf;
+TBuffer highPriorityBuffer;
 uint16_t sgwPackPlrOffsetTbl[MAX_PLRS];
 bool sgbPlayerTurnBitTbl[MAX_PLRS];
 bool sgbPlayerLeftGameTbl[MAX_PLRS];
-bool gbShouldValidatePackage;
+bool shareNextHighPriorityMessage;
 uint8_t gbActivePlayers;
 bool gbGameDestroyed;
 bool sgbSendDeltaTbl[MAX_PLRS];
@@ -46,7 +47,7 @@ GameData sgGameInitInfo;
 bool gbSelectProvider;
 int sglTimeoutStart;
 int sgdwPlayerLeftReasonTbl[MAX_PLRS];
-TBuffer sgLoPriBuf;
+TBuffer lowPriorityBuffer;
 uint32_t sgdwGameLoops;
 /**
  * Specifies the maximum number of players in a game, where 1
@@ -103,10 +104,10 @@ void CopyPacket(TBuffer *buf, const byte *packet, size_t size)
 	p[size] = byte { 0 };
 }
 
-byte *ReceivePacket(TBuffer *pBuf, byte *body, size_t *size)
+byte *CopyBufferedPackets(byte *destination, TBuffer *source, size_t *size)
 {
-	if (pBuf->dwNextWriteOffset != 0) {
-		byte *srcPtr = pBuf->bData;
+	if (source->dwNextWriteOffset != 0) {
+		byte *srcPtr = source->bData;
 		while (true) {
 			auto chunkSize = static_cast<uint8_t>(*srcPtr);
 			if (chunkSize == 0)
@@ -114,16 +115,16 @@ byte *ReceivePacket(TBuffer *pBuf, byte *body, size_t *size)
 			if (chunkSize > *size)
 				break;
 			srcPtr++;
-			memcpy(body, srcPtr, chunkSize);
-			body += chunkSize;
+			memcpy(destination, srcPtr, chunkSize);
+			destination += chunkSize;
 			srcPtr += chunkSize;
 			*size -= chunkSize;
 		}
-		memcpy(pBuf->bData, srcPtr, (pBuf->bData - srcPtr) + pBuf->dwNextWriteOffset + 1);
-		pBuf->dwNextWriteOffset += static_cast<uint32_t>(pBuf->bData - srcPtr);
-		return body;
+		memcpy(source->bData, srcPtr, (source->bData - srcPtr) + source->dwNextWriteOffset + 1);
+		source->dwNextWriteOffset += static_cast<uint32_t>(source->bData - srcPtr);
+		return destination;
 	}
-	return body;
+	return destination;
 }
 
 void NetReceivePlayerData(TPkt *pkt)
@@ -244,6 +245,9 @@ void PlayerLeftMsg(int pnum, bool left)
 {
 	Player &player = Players[pnum];
 
+	if (&player == InspectPlayer)
+		InspectPlayer = MyPlayer;
+
 	if (&player == MyPlayer)
 		return;
 	if (!player.plractive)
@@ -359,13 +363,12 @@ void SetupLocalPositions()
 	leveltype = DTYPE_TOWN;
 	setlevel = false;
 
-	const auto x = static_cast<WorldTileCoord>(75 + plrxoff[MyPlayerId]);
-	const auto y = static_cast<WorldTileCoord>(68 + plryoff[MyPlayerId]);
+	const WorldTilePosition spawns[9] = { { 75, 68 }, { 77, 70 }, { 75, 70 }, { 77, 68 }, { 76, 69 }, { 75, 69 }, { 76, 68 }, { 77, 69 }, { 76, 70 } };
 
 	Player &myPlayer = *MyPlayer;
 
-	myPlayer.position.tile = WorldTilePosition { x, y };
-	myPlayer.position.future = WorldTilePosition { x, y };
+	myPlayer.position.tile = spawns[MyPlayerId];
+	myPlayer.position.future = myPlayer.position.tile;
 	myPlayer.setLevel(currlevel);
 	myPlayer._pLvlChanging = true;
 	myPlayer.pLvlLoad = 0;
@@ -437,6 +440,7 @@ bool InitSingle(GameData *gameData)
 
 	MyPlayerId = 0;
 	MyPlayer = &Players[MyPlayerId];
+	InspectPlayer = MyPlayer;
 	gbIsMultiplayer = false;
 
 	pfile_read_player_from_save(gSaveNumber, *MyPlayer);
@@ -467,6 +471,7 @@ bool InitMulti(GameData *gameData)
 	}
 	MyPlayerId = playerId;
 	MyPlayer = &Players[MyPlayerId];
+	InspectPlayer = MyPlayer;
 	gbIsMultiplayer = true;
 
 	pfile_read_player_from_save(gSaveNumber, *MyPlayer);
@@ -495,7 +500,7 @@ void InitGameInfo()
 void NetSendLoPri(int playerId, const byte *data, size_t size)
 {
 	if (data != nullptr && size != 0) {
-		CopyPacket(&sgLoPriBuf, data, size);
+		CopyPacket(&lowPriorityBuffer, data, size);
 		SendPacket(playerId, data, size);
 	}
 }
@@ -503,18 +508,19 @@ void NetSendLoPri(int playerId, const byte *data, size_t size)
 void NetSendHiPri(int playerId, const byte *data, size_t size)
 {
 	if (data != nullptr && size != 0) {
-		CopyPacket(&sgHiPriBuf, data, size);
+		CopyPacket(&highPriorityBuffer, data, size);
 		SendPacket(playerId, data, size);
 	}
-	if (!gbShouldValidatePackage) {
-		gbShouldValidatePackage = true;
+	if (shareNextHighPriorityMessage) {
+		shareNextHighPriorityMessage = false;
 		TPkt pkt;
 		NetReceivePlayerData(&pkt);
-		size_t msgSize = gdwNormalMsgSize - sizeof(TPktHdr);
-		byte *hipriBody = ReceivePacket(&sgHiPriBuf, pkt.body, &msgSize);
-		byte *lowpriBody = ReceivePacket(&sgLoPriBuf, hipriBody, &msgSize);
-		msgSize = sync_all_monsters(lowpriBody, msgSize);
-		const size_t len = gdwNormalMsgSize - msgSize;
+		byte *destination = pkt.body;
+		size_t remainingSpace = gdwNormalMsgSize - sizeof(TPktHdr);
+		destination = CopyBufferedPackets(destination, &highPriorityBuffer, &remainingSpace);
+		destination = CopyBufferedPackets(destination, &lowPriorityBuffer, &remainingSpace);
+		remainingSpace = sync_all_monsters(destination, remainingSpace);
+		const size_t len = gdwNormalMsgSize - remainingSpace;
 		pkt.hdr.wLen = SDL_SwapLE16(static_cast<uint16_t>(len));
 		if (!SNetSendMessage(SNPLAYER_OTHERS, &pkt.hdr, static_cast<unsigned>(len)))
 			nthread_terminate_game("SNetSendMessage");
@@ -585,13 +591,17 @@ bool multi_handle_delta()
 
 	sgbTimeout = false;
 	if (received) {
-		if (!gbShouldValidatePackage) {
-			NetSendHiPri(MyPlayerId, nullptr, 0);
-			gbShouldValidatePackage = false;
-		} else {
-			gbShouldValidatePackage = false;
-			if (sgHiPriBuf.dwNextWriteOffset != 0)
+		if (!shareNextHighPriorityMessage) {
+			// If there are any high priority messages pending,
+			// share them with other players now
+			shareNextHighPriorityMessage = true;
+			if (highPriorityBuffer.dwNextWriteOffset != 0)
 				NetSendHiPri(MyPlayerId, nullptr, 0);
+		} else {
+			// If there were no high priority messages in at least two consecutive game
+			// ticks, this shares the low priority messages and monster sync data
+			NetSendHiPri(MyPlayerId, nullptr, 0);
+			shareNextHighPriorityMessage = true;
 		}
 	}
 	MonsterSeeds();
@@ -641,7 +651,7 @@ void multi_process_network_packets()
 			player._pBaseDex = pkt->bdex;
 			if (!cond && player.plractive && player._pHitPoints != 0) {
 				if (player.isOnActiveLevel() && !player._pLvlChanging) {
-					if (player.position.tile.WalkingDistance(syncPosition) > 3 && dPlayer[pkt->px][pkt->py] == 0) {
+					if (player.position.tile.WalkingDistance(syncPosition) > 3 && PosOkPlayer(player, syncPosition)) {
 						// got out of sync, clear the tiles around where we last thought the player was located
 						FixPlrWalkTags(player);
 
@@ -652,6 +662,7 @@ void multi_process_network_packets()
 						player.position.future = syncPosition;
 						if (player.isWalking())
 							player.position.temp = syncPosition;
+						SetPlayerOld(player);
 						dPlayer[player.position.tile.x][player.position.tile.y] = playerId + 1;
 					}
 					if (player.position.future.WalkingDistance(player.position.tile) > 1) {
@@ -663,6 +674,7 @@ void multi_process_network_packets()
 				} else {
 					player.position.tile = syncPosition;
 					player.position.future = syncPosition;
+					SetPlayerOld(player);
 				}
 			}
 		}
@@ -749,9 +761,9 @@ bool NetInit(bool bSinglePlayer)
 		sgbTimeout = false;
 		delta_init();
 		InitPlrMsg();
-		BufferInit(&sgHiPriBuf);
-		BufferInit(&sgLoPriBuf);
-		gbShouldValidatePackage = false;
+		BufferInit(&highPriorityBuffer);
+		BufferInit(&lowPriorityBuffer);
+		shareNextHighPriorityMessage = true;
 		sync_init();
 		nthread_start(sgbPlayerTurnBitTbl[MyPlayerId]);
 		tmsg_start();

@@ -5,8 +5,10 @@
  */
 #pragma once
 
+#include <cstdint>
 #include <unordered_map>
 
+#include "diablo.h"
 #include "engine.h"
 #include "engine/clx_sprite.hpp"
 #include "utils/stdcompat/string_view.hpp"
@@ -18,10 +20,15 @@ extern OptionalOwnedClxSpriteList pSquareCel;
 extern bool DebugToggle;
 extern bool DebugGodMode;
 extern bool DebugVision;
+extern bool DebugPath;
 extern bool DebugGrid;
 extern std::unordered_map<int, Point> DebugCoordsMap;
 extern bool DebugScrollViewEnabled;
 extern std::string debugTRN;
+extern uint32_t glMid1Seed[NUMLEVELS];
+extern uint32_t glMid2Seed[NUMLEVELS];
+extern uint32_t glMid3Seed[NUMLEVELS];
+extern uint32_t glEndSeed[NUMLEVELS];
 
 void FreeDebugGFX();
 void LoadDebugGFX();

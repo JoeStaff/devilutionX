@@ -165,15 +165,19 @@ set(devilutionx_assets
   gendata/cut2w.clx
   gendata/cut3w.clx
   gendata/cut4w.clx
+  gendata/cutgatew.clx
   gendata/cutl1dw.clx
   gendata/cutportlw.clx
   gendata/cutportrw.clx
   gendata/cutstartw.clx
   gendata/cutttw.clx
+  gendata/pause.trn
   levels/l1data/sklkngt.dun
   levels/l2data/bonechat.dun
   levels/towndata/automap.dun
   levels/towndata/automap.amp
+  nlevels/cutl5w.clx
+  nlevels/cutl6w.clx
   nlevels/l5data/cornerstone.dun
   nlevels/l5data/uberroom.dun
   ui_art/diablo.pal

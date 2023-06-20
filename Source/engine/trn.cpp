@@ -1,28 +1,31 @@
-#include <fmt/format.h>
+#include "engine/trn.hpp"
+
+#include <cstdint>
 #include <unordered_map>
+
+#include <fmt/format.h>
 
 #ifdef _DEBUG
 #include "debug.h"
 #endif
 #include "engine/load_file.hpp"
-#include "engine/trn.hpp"
 #include "lighting.h"
 
 namespace devilution {
 
 uint8_t *GetInfravisionTRN()
 {
-	return &LightTables[16 * 256];
+	return InfravisionTable.data();
 }
 
 uint8_t *GetStoneTRN()
 {
-	return &LightTables[17 * 256];
+	return StoneTable.data();
 }
 
 uint8_t *GetPauseTRN()
 {
-	return &LightTables[18 * 256];
+	return PauseTable.data();
 }
 
 std::optional<std::array<uint8_t, 256>> GetClassTRN(Player &player)

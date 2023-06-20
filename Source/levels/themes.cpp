@@ -5,6 +5,8 @@
  */
 #include "levels/themes.h"
 
+#include <cstdint>
+
 #include <fmt/core.h>
 
 #include "engine/path.h"
@@ -514,7 +516,7 @@ void Theme_Treasure(int t)
 	int treasrnd[4] = { 4, 9, 7, 10 };
 	int monstrnd[4] = { 6, 8, 3, 7 };
 
-	AdvanceRndSeed();
+	DiscardRandomValues(1);
 	for (int yp = 0; yp < MAXDUNY; yp++) {
 		for (int xp = 0; xp < MAXDUNX; xp++) {
 			if (dTransVal[xp][yp] == themes[t].ttval && IsTileNotSolid({ xp, yp })) {
@@ -913,7 +915,6 @@ void CreateThemeRooms()
 		return;
 	}
 
-	ApplyObjectLighting = true;
 	for (int i = 0; i < numthemes; i++) {
 		themex = 0;
 		themey = 0;
@@ -973,7 +974,6 @@ void CreateThemeRooms()
 			app_fatal(StrCat("Unknown theme type: ", static_cast<int>(themes[i].ttype)));
 		}
 	}
-	ApplyObjectLighting = false;
 	if (leveltype == DTYPE_HELL && themeCount > 0) {
 		UpdateL4Trans();
 	}

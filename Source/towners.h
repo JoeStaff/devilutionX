@@ -46,8 +46,8 @@ struct Towner {
 
 	/** Tile position of NPC */
 	Point position;
-	/** Used to get a voice line and text related to active quests when the player speaks to a town npc */
-	int16_t seed;
+	/** Randomly chosen topic for discussion (picked when loading into town) */
+	_speech_id gossip;
 	uint16_t _tAnimWidth;
 	/** Tick length of each frame in the current animation */
 	int16_t _tAnimDelay;
@@ -68,11 +68,20 @@ struct Towner {
 };
 
 extern Towner Towners[NUM_TOWNERS];
+/**
+ * @brief Maps from a _talker_id value to a pointer to the Towner object, if they have been initialised
+ * @param type enum constant identifying the towner
+ * @return Pointer to the Towner or nullptr if they are not available
+ */
+Towner *GetTowner(_talker_id type);
 
 void InitTowners();
 void FreeTownerGFX();
 void ProcessTowners();
 void TalkToTowner(Player &player, int t);
+
+void UpdateGirlAnimAfterQuestComplete();
+void UpdateCowFarmerAnimAfterQuestComplete();
 
 #ifdef _DEBUG
 bool DebugTalkToTowner(std::string targetName);

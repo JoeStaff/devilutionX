@@ -5,6 +5,8 @@
  */
 #include "engine/render/scrollrt.h"
 
+#include <cstdint>
+
 #include "DiabloUI/ui_flags.hpp"
 #include "automap.h"
 #include "controls/plrctrls.h"
@@ -405,7 +407,7 @@ void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Po
 	if (static_cast<size_t>(pcursplr) < Players.size() && &player == &Players[pcursplr])
 		ClxDrawOutlineSkipColorZero(out, 165, spriteBufferPosition, sprite);
 
-	if (&player == MyPlayer) {
+	if (&player == MyPlayer && IsNoneOf(leveltype, DTYPE_NEST, DTYPE_CRYPT)) {
 		ClxDraw(out, spriteBufferPosition, sprite);
 		DrawPlayerIcons(out, player, targetBufferPosition, false);
 		return;
@@ -483,7 +485,7 @@ void DrawObject(const Surface &out, Point tilePosition, Point targetBufferPositi
 	if (&objectToDraw == ObjectUnderCursor) {
 		ClxDrawOutlineSkipColorZero(out, 194, screenPosition, sprite);
 	}
-	if (objectToDraw._oLight) {
+	if (objectToDraw.applyLighting) {
 		ClxDrawLight(out, screenPosition, sprite);
 	} else {
 		ClxDraw(out, screenPosition, sprite);
@@ -502,6 +504,12 @@ void DrawCell(const Surface &out, Point tilePosition, Point targetBufferPosition
 {
 	const uint16_t levelPieceId = dPiece[tilePosition.x][tilePosition.y];
 	const MICROS *pMap = &DPieceMicros[levelPieceId];
+
+	const uint8_t *tbl = LightTables[LightTableIndex].data();
+#ifdef _DEBUG
+	if (DebugPath && MyPlayer->IsPositionInPath(tilePosition))
+		tbl = GetPauseTRN();
+#endif
 
 	bool transparency = TileHasAny(levelPieceId, TileProperties::Transparent) && TransList[dTransVal[tilePosition.x][tilePosition.y]];
 #ifdef _DEBUG
@@ -558,7 +566,7 @@ void DrawCell(const Surface &out, Point tilePosition, Point targetBufferPosition
 			if (levelCelBlock.hasValue()) {
 				if (maskType != MaskType::LeftFoliage || tileType == TileType::TransparentSquare) {
 					RenderTile(out, targetBufferPosition,
-					    levelCelBlock, maskType, LightTableIndex);
+					    levelCelBlock, maskType, tbl);
 				}
 			}
 		}
@@ -570,7 +578,7 @@ void DrawCell(const Surface &out, Point tilePosition, Point targetBufferPosition
 				if (transparency || !foliage || levelCelBlock.type() == TileType::TransparentSquare) {
 					if (maskType != MaskType::RightFoliage || tileType == TileType::TransparentSquare) {
 						RenderTile(out, targetBufferPosition + Displacement { TILE_WIDTH / 2, 0 },
-						    levelCelBlock, maskType, LightTableIndex);
+						    levelCelBlock, maskType, tbl);
 					}
 				}
 			}
@@ -584,7 +592,7 @@ void DrawCell(const Surface &out, Point tilePosition, Point targetBufferPosition
 			if (levelCelBlock.hasValue()) {
 				RenderTile(out, targetBufferPosition,
 				    levelCelBlock,
-				    transparency ? MaskType::Transparent : MaskType::Solid, LightTableIndex);
+				    transparency ? MaskType::Transparent : MaskType::Solid, tbl);
 			}
 		}
 		{
@@ -592,7 +600,7 @@ void DrawCell(const Surface &out, Point tilePosition, Point targetBufferPosition
 			if (levelCelBlock.hasValue()) {
 				RenderTile(out, targetBufferPosition + Displacement { TILE_WIDTH / 2, 0 },
 				    levelCelBlock,
-				    transparency ? MaskType::Transparent : MaskType::Solid, LightTableIndex);
+				    transparency ? MaskType::Transparent : MaskType::Solid, tbl);
 			}
 		}
 		targetBufferPosition.y -= TILE_HEIGHT;
@@ -609,19 +617,25 @@ void DrawFloor(const Surface &out, Point tilePosition, Point targetBufferPositio
 {
 	LightTableIndex = dLight[tilePosition.x][tilePosition.y];
 
+	const uint8_t *tbl = LightTables[LightTableIndex].data();
+#ifdef _DEBUG
+	if (DebugPath && MyPlayer->IsPositionInPath(tilePosition))
+		tbl = GetPauseTRN();
+#endif
+
 	const uint16_t levelPieceId = dPiece[tilePosition.x][tilePosition.y];
 	{
 		const LevelCelBlock levelCelBlock { DPieceMicros[levelPieceId].mt[0] };
 		if (levelCelBlock.hasValue()) {
 			RenderTile(out, targetBufferPosition,
-			    levelCelBlock, MaskType::Solid, LightTableIndex);
+			    levelCelBlock, MaskType::Solid, tbl);
 		}
 	}
 	{
 		const LevelCelBlock levelCelBlock { DPieceMicros[levelPieceId].mt[1] };
 		if (levelCelBlock.hasValue()) {
 			RenderTile(out, targetBufferPosition + Displacement { TILE_WIDTH / 2, 0 },
-			    levelCelBlock, MaskType::Solid, LightTableIndex);
+			    levelCelBlock, MaskType::Solid, tbl);
 		}
 	}
 }
@@ -768,17 +782,15 @@ void DrawDungeon(const Surface &out, Point tilePosition, Point targetBufferPosit
 	}
 
 	if (LightTableIndex < LightsMax && bDead != 0) {
-		do {
-			Corpse &corpse = Corpses[(bDead & 0x1F) - 1];
-			const Point position { targetBufferPosition.x - CalculateWidth2(corpse.width), targetBufferPosition.y };
-			const ClxSprite sprite = corpse.spritesForDirection(static_cast<Direction>((bDead >> 5) & 7))[corpse.frame];
-			if (corpse.translationPaletteIndex != 0) {
-				const uint8_t *trn = Monsters[corpse.translationPaletteIndex - 1].uniqueMonsterTRN.get();
-				ClxDrawTRN(out, position, sprite, trn);
-			} else {
-				ClxDrawLight(out, position, sprite);
-			}
-		} while (false);
+		Corpse &corpse = Corpses[(bDead & 0x1F) - 1];
+		const Point position { targetBufferPosition.x - CalculateWidth2(corpse.width), targetBufferPosition.y };
+		const ClxSprite sprite = corpse.spritesForDirection(static_cast<Direction>((bDead >> 5) & 7))[corpse.frame];
+		if (corpse.translationPaletteIndex != 0) {
+			const uint8_t *trn = Monsters[corpse.translationPaletteIndex - 1].uniqueMonsterTRN.get();
+			ClxDrawTRN(out, position, sprite, trn);
+		} else {
+			ClxDrawLight(out, position, sprite);
+		}
 	}
 	DrawObject(out, tilePosition, targetBufferPosition, true);
 	DrawItem(out, tilePosition, targetBufferPosition, true);

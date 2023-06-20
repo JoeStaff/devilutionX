@@ -6,6 +6,8 @@
 
 #include "playerdat.hpp"
 
+#include <cstdint>
+
 #include "items.h"
 #include "player.h"
 #include "textdat.h"
@@ -14,7 +16,7 @@
 namespace devilution {
 
 /** Specifies the experience point limit of each level. */
-const uint32_t ExpLvlsTbl[MaxCharacterLevel + 1] = {
+const uint32_t ExpLvlsTbl[MaxCharacterLevel] = {
 	0,
 	2000,
 	4620,
@@ -64,8 +66,7 @@ const uint32_t ExpLvlsTbl[MaxCharacterLevel + 1] = {
 	733825617,
 	892680222,
 	1082908612,
-	1310707109,
-	1583495809
+	1310707109
 };
 
 const _sfx_id herosounds[enum_size<HeroClass>::value][enum_size<HeroSpeech>::value] = {
@@ -97,13 +98,13 @@ const PlayerData PlayersData[] = {
 /** Contains the data related to each player class. */
 const PlayerSpriteData PlayersSpriteData[] = {
 	// clang-format off
-// HeroClass                 stand, walk, attack, bow, swHit, block, lightning, fire, magic, death
+// HeroClass                   stand,   walk,   attack,   bow, swHit,   block,   lightning,   fire,   magic,   death
 
 // TRANSLATORS: Player Block
 /* HeroClass::Warrior */   {      96,     96,      128,    96,    96,      96,          96,     96,      96,     128 },
 /* HeroClass::Rogue */     {      96,     96,      128,   128,    96,      96,          96,     96,      96,     128 },
 /* HeroClass::Sorcerer */  {      96,     96,      128,   128,    96,      96,         128,    128,     128,     128 },
-/* HeroClass::Monk */      {     112,    112,      130,   128,    98,      98,         114,    114,     114,     160 },
+/* HeroClass::Monk */      {     112,    112,      130,   130,    98,      98,         114,    114,     114,     160 },
 /* HeroClass::Bard */      {      96,     96,      128,   128,    96,      96,          96,     96,      96,     128 },
 /* HeroClass::Barbarian */ {      96,     96,      128,    96,    96,      96,          96,     96,      96,     128 },
 	// clang-format on

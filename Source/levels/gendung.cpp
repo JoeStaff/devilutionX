@@ -1,6 +1,7 @@
-#include <stack>
-
 #include "levels/gendung.h"
+
+#include <cstdint>
+#include <stack>
 
 #include "engine/load_file.hpp"
 #include "engine/random.hpp"
@@ -36,12 +37,12 @@ dungeon_type setlvltype;
 Point ViewPosition;
 uint_fast8_t MicroTileLen;
 int8_t TransVal;
-bool TransList[256];
+std::array<bool, 256> TransList;
 uint16_t dPiece[MAXDUNX][MAXDUNY];
 MICROS DPieceMicros[MAXTILES];
 int8_t dTransVal[MAXDUNX][MAXDUNY];
-char dLight[MAXDUNX][MAXDUNY];
-char dPreLight[MAXDUNX][MAXDUNY];
+uint8_t dLight[MAXDUNX][MAXDUNY];
+uint8_t dPreLight[MAXDUNX][MAXDUNY];
 DungeonFlag dFlags[MAXDUNX][MAXDUNY];
 int8_t dPlayer[MAXDUNX][MAXDUNY];
 int16_t dMonster[MAXDUNX][MAXDUNY];
@@ -338,7 +339,12 @@ void InitGlobals()
 	memset(dItem, 0, sizeof(dItem));
 	memset(dObject, 0, sizeof(dObject));
 	memset(dSpecial, 0, sizeof(dSpecial));
-	memset(dLight, DisableLighting || leveltype == DTYPE_TOWN ? 0 : 15, sizeof(dLight));
+	uint8_t defaultLight = leveltype == DTYPE_TOWN ? 0 : 15;
+#ifdef _DEBUG
+	if (DisableLighting)
+		defaultLight = 0;
+#endif
+	memset(dLight, defaultLight, sizeof(dLight));
 
 	DRLG_InitTrans();
 
@@ -496,7 +502,7 @@ void SetDungeonMicros()
 void DRLG_InitTrans()
 {
 	memset(dTransVal, 0, sizeof(dTransVal));
-	memset(TransList, 0, sizeof(TransList));
+	TransList = {}; // TODO duplicate reset in InitLighting()
 	TransVal = 1;
 }
 

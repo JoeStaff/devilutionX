@@ -6,6 +6,7 @@
 
 #ifdef _DEBUG
 
+#include <cstdint>
 #include <cstdio>
 
 #include "debug.h"
@@ -31,6 +32,7 @@
 #include "utils/file_util.h"
 #include "utils/language.h"
 #include "utils/log.hpp"
+#include "utils/str_case.hpp"
 #include "utils/str_cat.hpp"
 #include "utils/str_split.hpp"
 
@@ -41,10 +43,17 @@ OptionalOwnedClxSpriteList pSquareCel;
 bool DebugToggle = false;
 bool DebugGodMode = false;
 bool DebugVision = false;
+bool DebugPath = false;
 bool DebugGrid = false;
 std::unordered_map<int, Point> DebugCoordsMap;
 bool DebugScrollViewEnabled = false;
 std::string debugTRN;
+
+// Used for debugging level generation
+uint32_t glMid1Seed[NUMLEVELS];
+uint32_t glMid2Seed[NUMLEVELS];
+uint32_t glMid3Seed[NUMLEVELS];
+uint32_t glEndSeed[NUMLEVELS];
 
 namespace {
 
@@ -86,20 +95,6 @@ std::vector<std::string> SearchMonsters;
 std::vector<std::string> SearchItems;
 std::vector<std::string> SearchObjects;
 
-// Used for debugging level generation
-uint32_t glMid1Seed[NUMLEVELS];
-uint32_t glMid2Seed[NUMLEVELS];
-uint32_t glMid3Seed[NUMLEVELS];
-uint32_t glEndSeed[NUMLEVELS];
-
-void SetSpellLevelCheat(SpellID spl, int spllvl)
-{
-	Player &myPlayer = *MyPlayer;
-
-	myPlayer._pMemSpells |= GetSpellBitmask(spl);
-	myPlayer._pSplLvl[static_cast<int8_t>(spl)] = spllvl;
-}
-
 void PrintDebugMonster(const Monster &monster)
 {
 	EventPlrMsg(StrCat(
@@ -119,20 +114,6 @@ void PrintDebugMonster(const Monster &monster)
 	}
 
 	EventPlrMsg(StrCat("Active List = ", bActive ? 1 : 0, ", Squelch = ", monster.activeForTicks), UiFlags::ColorWhite);
-}
-
-void ProcessMessages()
-{
-	SDL_Event event;
-	uint16_t modState;
-	while (FetchMessage(&event, &modState)) {
-		if (event.type == SDL_QUIT) {
-			gbRunGameResult = false;
-			gbRunGame = false;
-			break;
-		}
-		HandleMessage(event, modState);
-	}
 }
 
 struct DebugCmdItem {
@@ -474,6 +455,15 @@ std::string DebugCmdVision(const string_view parameter)
 	return "My path is set.";
 }
 
+std::string DebugCmdPath(const string_view parameter)
+{
+	DebugPath = !DebugPath;
+	if (DebugPath)
+		return "The mushroom trail.";
+
+	return "The path is hidden.";
+}
+
 std::string DebugCmdQuest(const string_view parameter)
 {
 	if (parameter.empty()) {
@@ -543,10 +533,10 @@ std::string DebugCmdMinStats(const string_view parameter)
 
 std::string DebugCmdSetSpellsLevel(const string_view parameter)
 {
-	int level = std::max(0, atoi(parameter.data()));
-	for (int i = static_cast<int8_t>(SpellID::Firebolt); i < MAX_SPELLS; i++) {
+	uint8_t level = static_cast<uint8_t>(std::max(0, atoi(parameter.data())));
+	for (uint8_t i = static_cast<uint8_t>(SpellID::Firebolt); i < MAX_SPELLS; i++) {
 		if (GetSpellBookLevel(static_cast<SpellID>(i)) != -1) {
-			SetSpellLevelCheat(static_cast<SpellID>(i), level);
+			NetSendCmdParam2(true, CMD_CHANGE_SPELL_LEVEL, i, level);
 		}
 	}
 	if (level == 0)
@@ -580,7 +570,7 @@ std::string DebugCmdChangeHealth(const string_view parameter)
 	int newHealth = myPlayer._pHitPoints + (change * 64);
 	SetPlayerHitPoints(myPlayer, newHealth);
 	if (newHealth <= 0)
-		SyncPlrKill(myPlayer, 0);
+		SyncPlrKill(myPlayer, DeathReason::MonsterOrTrap);
 
 	return "Health has changed.";
 }
@@ -660,11 +650,6 @@ std::string DebugCmdShowGrid(const string_view parameter)
 	return "Back to boring.";
 }
 
-std::string DebugCmdLevelSeed(const string_view parameter)
-{
-	return StrCat("Seedinfo for level ", currlevel, "\nseed: ", glSeedTbl[currlevel], "\nMid1: ", glMid1Seed[currlevel], "\nMid2: ", glMid2Seed[currlevel], "\nMid3: ", glMid3Seed[currlevel], "\nEnd: ", glEndSeed[currlevel]);
-}
-
 std::string DebugCmdSpawnUniqueMonster(const string_view parameter)
 {
 	if (leveltype == DTYPE_TOWN)
@@ -685,14 +670,13 @@ std::string DebugCmdSpawnUniqueMonster(const string_view parameter)
 		return "Monster name cannot be empty. Duh.";
 
 	name.pop_back(); // remove last space
-	std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return std::tolower(c); });
+	AsciiStrToLower(name);
 
 	int mtype = -1;
 	UniqueMonsterType uniqueIndex = UniqueMonsterType::None;
 	for (size_t i = 0; UniqueMonstersData[i].mtype != MT_INVALID; i++) {
 		auto mondata = UniqueMonstersData[i];
-		std::string monsterName(mondata.mName);
-		std::transform(monsterName.begin(), monsterName.end(), monsterName.begin(), [](unsigned char c) { return std::tolower(c); });
+		const std::string monsterName = AsciiStrToLower(mondata.mName);
 		if (monsterName.find(name) == std::string::npos)
 			continue;
 		mtype = mondata.mtype;
@@ -773,14 +757,13 @@ std::string DebugCmdSpawnMonster(const string_view parameter)
 		return "Monster name cannot be empty. Duh.";
 
 	name.pop_back(); // remove last space
-	std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return std::tolower(c); });
+	AsciiStrToLower(name);
 
 	int mtype = -1;
 
 	for (int i = 0; i < NUM_MTYPES; i++) {
 		auto mondata = MonstersData[i];
-		std::string monsterName(mondata.name);
-		std::transform(monsterName.begin(), monsterName.end(), monsterName.begin(), [](unsigned char c) { return std::tolower(c); });
+		const std::string monsterName = AsciiStrToLower(mondata.name);
 		if (monsterName.find(name) == std::string::npos)
 			continue;
 		mtype = i;
@@ -1006,7 +989,7 @@ std::string DebugCmdSearchMonster(const string_view parameter)
 
 	std::string name;
 	AppendStrView(name, parameter);
-	std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return std::tolower(c); });
+	AsciiStrToLower(name);
 	SearchMonsters.push_back(name);
 
 	return "We will find this bastard!";
@@ -1021,7 +1004,7 @@ std::string DebugCmdSearchItem(const string_view parameter)
 
 	std::string name;
 	AppendStrView(name, parameter);
-	std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return std::tolower(c); });
+	AsciiStrToLower(name);
 	SearchItems.push_back(name);
 
 	return "Are you greedy? Anyway I will help you.";
@@ -1036,7 +1019,7 @@ std::string DebugCmdSearchObject(const string_view parameter)
 
 	std::string name;
 	AppendStrView(name, parameter);
-	std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return std::tolower(c); });
+	AsciiStrToLower(name);
 	SearchObjects.push_back(name);
 
 	return "I will look for the pyramids. Oh sorry, I'm looking for what you want, of course.";
@@ -1070,6 +1053,7 @@ std::vector<DebugCmdItem> DebugCmdList = {
 	{ "restart", "Resets specified {level}.", "{level} ({seed})", &DebugCmdResetLevel },
 	{ "god", "Toggles godmode.", "", &DebugCmdGodMode },
 	{ "drawvision", "Toggles vision debug rendering.", "", &DebugCmdVision },
+	{ "drawpath", "Toggles path debug rendering.", "", &DebugCmdPath },
 	{ "fullbright", "Toggles whether light shading is in effect.", "", &DebugCmdLighting },
 	{ "fill", "Refills health and mana.", "", &DebugCmdRefillHealthMana },
 	{ "changehp", "Changes health by {value} (Use a negative value to remove health).", "{value}", &DebugCmdChangeHealth },
@@ -1080,7 +1064,6 @@ std::vector<DebugCmdItem> DebugCmdList = {
 	{ "exit", "Exits the game.", "", &DebugCmdExit },
 	{ "arrow", "Changes arrow effect (normal, fire, lightning, explosion).", "{effect}", &DebugCmdArrow },
 	{ "grid", "Toggles showing grid.", "", &DebugCmdShowGrid },
-	{ "seedinfo", "Show seed infos for current level.", "", &DebugCmdLevelSeed },
 	{ "spawnu", "Spawns unique monster {name}.", "{name} ({count})", &DebugCmdSpawnUniqueMonster },
 	{ "spawn", "Spawns monster {name}.", "{name} ({count})", &DebugCmdSpawnMonster },
 	{ "tiledata", "Toggles showing tile data {name} (leave name empty to see a list).", "{name}", &DebugCmdShowTileData },
@@ -1175,6 +1158,7 @@ bool IsDebugGridInMegatiles()
 bool GetDebugGridText(Point dungeonCoords, char *debugGridTextBuffer)
 {
 	int info = 0;
+	int blankValue = 0;
 	Point megaCoords = dungeonCoords.worldToMega();
 	switch (SelectedDebugGridTextItem) {
 	case DebugGridTextItem::coords:
@@ -1201,9 +1185,11 @@ bool GetDebugGridText(Point dungeonCoords, char *debugGridTextBuffer)
 		break;
 	case DebugGridTextItem::dLight:
 		info = dLight[dungeonCoords.x][dungeonCoords.y];
+		blankValue = LightsMax;
 		break;
 	case DebugGridTextItem::dPreLight:
 		info = dPreLight[dungeonCoords.x][dungeonCoords.y];
+		blankValue = LightsMax;
 		break;
 	case DebugGridTextItem::dFlags:
 		info = static_cast<int>(dFlags[dungeonCoords.x][dungeonCoords.y]);
@@ -1250,7 +1236,7 @@ bool GetDebugGridText(Point dungeonCoords, char *debugGridTextBuffer)
 	case DebugGridTextItem::None:
 		return false;
 	}
-	if (info == 0)
+	if (info == blankValue)
 		return false;
 	*BufCopy(debugGridTextBuffer, info) = '\0';
 	return true;
@@ -1264,11 +1250,9 @@ bool IsDebugAutomapHighlightNeeded()
 bool ShouldHighlightDebugAutomapTile(Point position)
 {
 	auto matchesSearched = [](const string_view name, const std::vector<std::string> &searchedNames) {
-		std::string nameToLower;
-		StrAppend(nameToLower, name);
-		std::transform(nameToLower.begin(), nameToLower.end(), nameToLower.begin(), [](unsigned char c) { return std::tolower(c); });
+		const std::string lowercaseName = AsciiStrToLower(name);
 		for (const auto &searchedName : searchedNames) {
-			if (nameToLower.find(searchedName) != std::string::npos) {
+			if (lowercaseName.find(searchedName) != std::string::npos) {
 				return true;
 			}
 		}
@@ -1285,7 +1269,7 @@ bool ShouldHighlightDebugAutomapTile(Point position)
 	if (SearchItems.size() > 0 && dItem[position.x][position.y] != 0) {
 		const int itemId = abs(dItem[position.x][position.y]) - 1;
 		const Item &item = Items[itemId];
-		if (matchesSearched(item._iIName, SearchItems))
+		if (matchesSearched(item.getName(), SearchItems))
 			return true;
 	}
 

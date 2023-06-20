@@ -6,6 +6,7 @@
 #include "monster.h"
 
 #include <climits>
+#include <cstdint>
 
 #include <algorithm>
 #include <array>
@@ -55,9 +56,8 @@ size_t LevelMonsterTypeCount;
 Monster Monsters[MaxMonsters];
 int ActiveMonsters[MaxMonsters];
 size_t ActiveMonsterCount;
-// BUGFIX: replace MonsterKillCounts[MaxMonsters] with MonsterKillCounts[NUM_MTYPES].
 /** Tracks the total number of monsters killed per monster_id. */
-int MonsterKillCounts[MaxMonsters];
+int MonsterKillCounts[NUM_MTYPES];
 bool sgbSaveSoundOn;
 
 namespace {
@@ -152,7 +152,7 @@ void InitMonster(Monster &monster, Direction rd, size_t typeIndex, Point positio
 	monster.isInvalid = false;
 	monster.uniqueType = UniqueMonsterType::None;
 	monster.activeForTicks = 0;
-	monster.lightId = NO_LIGHT; // BUGFIX monsters initial light id should be -1 (fixed)
+	monster.lightId = NO_LIGHT;
 	monster.rndItemSeed = AdvanceRndSeed();
 	monster.aiSeed = AdvanceRndSeed();
 	monster.whoHit = 0;
@@ -180,7 +180,7 @@ void InitMonster(Monster &monster, Direction rd, size_t typeIndex, Point positio
 		if (gbIsHellfire)
 			monster.maxHitPoints += (gbIsMultiplayer ? 100 : 50) << 6;
 		else
-			monster.maxHitPoints += 64;
+			monster.maxHitPoints += 100 << 6;
 		monster.hitPoints = monster.maxHitPoints;
 		monster.toHit += NightmareToHitBonus;
 		monster.minDamage = 2 * (monster.minDamage + 2);
@@ -193,7 +193,7 @@ void InitMonster(Monster &monster, Direction rd, size_t typeIndex, Point positio
 		if (gbIsHellfire)
 			monster.maxHitPoints += (gbIsMultiplayer ? 200 : 100) << 6;
 		else
-			monster.maxHitPoints += 192;
+			monster.maxHitPoints += 200 << 6;
 		monster.hitPoints = monster.maxHitPoints;
 		monster.toHit += HellToHitBonus;
 		monster.minDamage = 4 * monster.minDamage + 6;
@@ -870,8 +870,9 @@ void SpawnLoot(Monster &monster, bool sendmsg)
 	} else if (monster.uniqueType == UniqueMonsterType::Defiler) {
 		if (effect_is_playing(USFX_DEFILER8))
 			stream_stop();
-		Quests[Q_DEFILER]._qlog = false;
 		SpawnMapOfDoom(monster.position.tile, sendmsg);
+		Quests[Q_DEFILER]._qactive = QUEST_DONE;
+		NetSendCmdQuest(true, Quests[Q_DEFILER]);
 	} else if (monster.uniqueType == UniqueMonsterType::HorkDemon) {
 		if (sgGameInitInfo.bTheoQuest != 0) {
 			SpawnTheodore(monster.position.tile, sendmsg);
@@ -884,7 +885,6 @@ void SpawnLoot(Monster &monster, bool sendmsg)
 			nSFX = USFX_NAKRUL6;
 		if (effect_is_playing(nSFX))
 			stream_stop();
-		Quests[Q_NAKRUL]._qlog = false;
 		UberDiabloMonsterIndex = -2;
 		CreateMagicWeapon(monster.position.tile, ItemType::Sword, ICURS_GREAT_SWORD, sendmsg, false);
 		CreateMagicWeapon(monster.position.tile, ItemType::Staff, ICURS_WAR_STAFF, sendmsg, false);
@@ -1013,7 +1013,10 @@ void StartHeal(Monster &monster)
 
 void SyncLightPosition(Monster &monster)
 {
-	Displacement offset = monster.position.CalculateWalkingOffset(monster.direction, monster.animInfo);
+	if (monster.lightId == NO_LIGHT)
+		return;
+
+	const WorldTileDisplacement offset = monster.isWalking() ? monster.position.CalculateWalkingOffset(monster.direction, monster.animInfo) : WorldTileDisplacement {};
 	ChangeLightOffset(monster.lightId, offset.screenToLight());
 }
 
@@ -1067,7 +1070,7 @@ bool MonsterWalk(Monster &monster, MonsterMode variant)
 		}
 	}
 
-	if (monster.lightId != NO_LIGHT) // BUGFIX: change uniqtype check to lightId check like it is in all other places (fixed)
+	if (monster.lightId != NO_LIGHT)
 		SyncLightPosition(monster);
 
 	return isAnimationEnd;
@@ -1405,29 +1408,6 @@ void MonsterTalk(Monster &monster)
 	if (effect_is_playing(Speeches[monster.talkMsg].sfxnr))
 		return;
 	InitQTextMsg(monster.talkMsg);
-	if (monster.uniqueType == UniqueMonsterType::Garbud) {
-		if (monster.talkMsg == TEXT_GARBUD1) {
-			Quests[Q_GARBUD]._qactive = QUEST_ACTIVE;
-			Quests[Q_GARBUD]._qlog = true;
-			NetSendCmdQuest(true, Quests[Q_GARBUD]);
-		}
-		if (monster.talkMsg == TEXT_GARBUD2 && (monster.flags & MFLAG_QUEST_COMPLETE) == 0) {
-			SpawnItem(monster, monster.position.tile + Displacement { 1, 1 }, true);
-			monster.flags |= MFLAG_QUEST_COMPLETE;
-			Quests[Q_GARBUD]._qvar1 = QS_GHARBAD_FIRST_ITEM_SPAWNED;
-			NetSendCmdQuest(true, Quests[Q_GARBUD]);
-		}
-	}
-	if (monster.uniqueType == UniqueMonsterType::Zhar
-	    && monster.talkMsg == TEXT_ZHAR1
-	    && (monster.flags & MFLAG_QUEST_COMPLETE) == 0) {
-		Quests[Q_ZHAR]._qactive = QUEST_ACTIVE;
-		Quests[Q_ZHAR]._qlog = true;
-		Quests[Q_ZHAR]._qvar1 = QS_ZHAR_ITEM_SPAWNED;
-		CreateTypeItem(monster.position.tile + Displacement { 1, 1 }, false, ItemType::Misc, IMISC_BOOK, true, false);
-		monster.flags |= MFLAG_QUEST_COMPLETE;
-		NetSendCmdQuest(true, Quests[Q_ZHAR]);
-	}
 	if (monster.uniqueType == UniqueMonsterType::SnotSpill) {
 		if (monster.talkMsg == TEXT_BANNER10 && (monster.flags & MFLAG_QUEST_COMPLETE) == 0) {
 			ObjChangeMap(SetPiece.position.x, SetPiece.position.y, SetPiece.position.x + (SetPiece.size.width / 2) + 2, SetPiece.position.y + (SetPiece.size.height / 2) - 2);
@@ -2102,7 +2082,6 @@ std::optional<Point> ScavengerFindCorpse(const Monster &scavenger)
 	for (int y = first; y <= last; y += increment) {
 		for (int x = first; x <= last; x += increment) {
 			Point position = scavenger.position.tile + Displacement { x, y };
-			// BUGFIX: incorrect check of offset against limits of the dungeon (fixed)
 			if (!InDungeonBounds(position))
 				continue;
 			if (dCorpse[position.x][position.y] == 0)
@@ -3148,7 +3127,7 @@ void PrepareUniqueMonst(Monster &monster, UniqueMonsterType monsterType, size_t 
 	monster.resistance = uniqueMonsterData.mMagicRes;
 	monster.talkMsg = uniqueMonsterData.mtalkmsg;
 	if (monsterType == UniqueMonsterType::HorkDemon)
-		monster.lightId = NO_LIGHT; // BUGFIX monsters initial light id should be -1 (fixed)
+		monster.lightId = NO_LIGHT;
 	else
 		monster.lightId = AddLight(monster.position.tile, 3);
 
@@ -3169,7 +3148,7 @@ void PrepareUniqueMonst(Monster &monster, UniqueMonsterType monsterType, size_t 
 		if (gbIsHellfire)
 			monster.maxHitPoints += (gbIsMultiplayer ? 100 : 50) << 6;
 		else
-			monster.maxHitPoints += 64;
+			monster.maxHitPoints += 100 << 6;
 		monster.hitPoints = monster.maxHitPoints;
 		monster.minDamage = 2 * (monster.minDamage + 2);
 		monster.maxDamage = 2 * (monster.maxDamage + 2);
@@ -3180,7 +3159,7 @@ void PrepareUniqueMonst(Monster &monster, UniqueMonsterType monsterType, size_t 
 		if (gbIsHellfire)
 			monster.maxHitPoints += (gbIsMultiplayer ? 200 : 100) << 6;
 		else
-			monster.maxHitPoints += 192;
+			monster.maxHitPoints += 200 << 6;
 		monster.hitPoints = monster.maxHitPoints;
 		monster.minDamage = 4 * monster.minDamage + 6;
 		monster.maxDamage = 4 * monster.maxDamage + 6;
@@ -3451,7 +3430,6 @@ void WeakenNaKrul()
 
 	auto &monster = Monsters[UberDiabloMonsterIndex];
 	PlayEffect(monster, MonsterSound::Death);
-	Quests[Q_NAKRUL]._qlog = false;
 	monster.armorClass -= 50;
 	int hp = monster.maxHitPoints / 2;
 	monster.resistance = 0;
@@ -3673,7 +3651,9 @@ void M_StartHit(Monster &monster, const Player &player, int dam)
 		monster.enemy = player.getId();
 		monster.enemyPosition = player.position.future;
 		monster.flags &= ~MFLAG_TARGETS_MONSTER;
-		monster.direction = GetMonsterDirection(monster);
+		if (monster.mode != MonsterMode::Petrified) {
+			monster.direction = GetMonsterDirection(monster);
+		}
 	}
 
 	M_StartHit(monster, dam);
@@ -3701,6 +3681,8 @@ void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 			md = Direction::South;
 		NewMonsterAnim(monster, MonsterGraphic::Death, md, gGameLogicStep < GameLogicStep::ProcessMonsters ? AnimationDistributionFlags::ProcessAnimationPending : AnimationDistributionFlags::None);
 		monster.mode = MonsterMode::Death;
+	} else if (monster.isUnique()) {
+		AddUnLight(monster.lightId);
 	}
 	monster.goal = MonsterGoal::None;
 	monster.var1 = 0;
@@ -3892,9 +3874,13 @@ void GolumAi(Monster &golem)
 				enemy.position.last = golem.position.tile;
 				for (int j = 0; j < 5; j++) {
 					for (int k = 0; k < 5; k++) {
-						int enemyId = dMonster[golem.position.tile.x + k - 2][golem.position.tile.y + j - 2]; // BUGFIX: Check if indexes are between 0 and 112
+						int mx = golem.position.tile.x + k - 2;
+						int my = golem.position.tile.y + j - 2;
+						if (!InDungeonBounds({ mx, my }))
+							continue;
+						int enemyId = dMonster[mx][my];
 						if (enemyId > 0)
-							Monsters[enemyId - 1].activeForTicks = UINT8_MAX; // BUGFIX: should be `Monsters[enemy-1]`, not Monsters[enemy]. (fixed)
+							Monsters[enemyId - 1].activeForTicks = UINT8_MAX;
 					}
 				}
 			}
@@ -4162,7 +4148,7 @@ void SyncMonsterAnim(Monster &monster)
 	}
 	MonsterGraphic graphic = MonsterGraphic::Stand;
 
-	switch (monster.mode) {
+	switch (monster.getVisualMonsterMode()) {
 	case MonsterMode::Stand:
 	case MonsterMode::Delay:
 	case MonsterMode::Talk:
@@ -4246,8 +4232,8 @@ void PrintMonstHistory(int mt)
 		if (maxHP < 1)
 			maxHP = 1;
 
-		int hpBonusNightmare = 1;
-		int hpBonusHell = 3;
+		int hpBonusNightmare = 100;
+		int hpBonusHell = 200;
 		if (gbIsHellfire) {
 			hpBonusNightmare = (!gbIsMultiplayer ? 50 : 100);
 			hpBonusHell = (!gbIsMultiplayer ? 100 : 200);
@@ -4494,12 +4480,11 @@ Monster *PreSpawnSkeleton()
 
 void TalktoMonster(Player &player, Monster &monster)
 {
-	monster.mode = MonsterMode::Talk;
-	if (monster.ai != MonsterAIID::Snotspill && monster.ai != MonsterAIID::Lachdanan) {
-		return;
-	}
+	if (&player == MyPlayer)
+		monster.mode = MonsterMode::Talk;
 
-	if (Quests[Q_LTBANNER].IsAvailable() && Quests[Q_LTBANNER]._qvar1 == 2) {
+	if (monster.uniqueType == UniqueMonsterType::SnotSpill
+	    && Quests[Q_LTBANNER].IsAvailable() && Quests[Q_LTBANNER]._qvar1 == 2) {
 		if (RemoveInventoryItemById(player, IDI_BANNER)) {
 			Quests[Q_LTBANNER]._qactive = QUEST_DONE;
 			monster.talkMsg = TEXT_BANNER12;
@@ -4507,7 +4492,8 @@ void TalktoMonster(Player &player, Monster &monster)
 			NetSendCmdQuest(true, Quests[Q_LTBANNER]);
 		}
 	}
-	if (Quests[Q_VEIL].IsAvailable() && monster.talkMsg >= TEXT_VEIL9) {
+	if (monster.uniqueType == UniqueMonsterType::Lachdan
+	    && Quests[Q_VEIL].IsAvailable() && monster.talkMsg >= TEXT_VEIL9) {
 		if (RemoveInventoryItemById(player, IDI_GLDNELIX) && (monster.flags & MFLAG_QUEST_COMPLETE) == 0) {
 			monster.talkMsg = TEXT_VEIL11;
 			monster.goal = MonsterGoal::Inquiring;
@@ -4517,6 +4503,32 @@ void TalktoMonster(Player &player, Monster &monster)
 				Quests[Q_VEIL]._qvar2 = QS_VEIL_ITEM_SPAWNED;
 				NetSendCmdQuest(true, Quests[Q_VEIL]);
 			}
+		}
+	}
+	if (monster.uniqueType == UniqueMonsterType::Zhar
+	    && monster.talkMsg == TEXT_ZHAR1
+	    && (monster.flags & MFLAG_QUEST_COMPLETE) == 0) {
+		if (MyPlayer == &player) {
+			Quests[Q_ZHAR]._qactive = QUEST_ACTIVE;
+			Quests[Q_ZHAR]._qlog = true;
+			Quests[Q_ZHAR]._qvar1 = QS_ZHAR_ITEM_SPAWNED;
+			CreateTypeItem(monster.position.tile + Displacement { 1, 1 }, false, ItemType::Misc, IMISC_BOOK, false, false, true);
+			monster.flags |= MFLAG_QUEST_COMPLETE;
+			NetSendCmdQuest(true, Quests[Q_ZHAR]);
+		}
+	}
+
+	if (monster.uniqueType == UniqueMonsterType::Garbud && MyPlayer == &player) {
+		if (monster.talkMsg == TEXT_GARBUD1) {
+			Quests[Q_GARBUD]._qactive = QUEST_ACTIVE;
+			Quests[Q_GARBUD]._qlog = true;
+			NetSendCmdQuest(true, Quests[Q_GARBUD]);
+		}
+		if (monster.talkMsg == TEXT_GARBUD2 && (monster.flags & MFLAG_QUEST_COMPLETE) == 0) {
+			SpawnItem(monster, monster.position.tile + Displacement { 1, 1 }, false, true);
+			monster.flags |= MFLAG_QUEST_COMPLETE;
+			Quests[Q_GARBUD]._qvar1 = QS_GHARBAD_FIRST_ITEM_SPAWNED;
+			NetSendCmdQuest(true, Quests[Q_GARBUD]);
 		}
 	}
 }
@@ -4626,7 +4638,7 @@ void Monster::petrify()
 
 bool Monster::isWalking() const
 {
-	switch (mode) {
+	switch (getVisualMonsterMode()) {
 	case MonsterMode::MoveNorthwards:
 	case MonsterMode::MoveSouthwards:
 	case MonsterMode::MoveSideways:
@@ -4686,6 +4698,20 @@ bool Monster::tryLiftGargoyle()
 		return true;
 	}
 	return false;
+}
+
+MonsterMode Monster::getVisualMonsterMode() const
+{
+	if (mode != MonsterMode::Petrified)
+		return mode;
+	size_t monsterId = this->getId();
+	for (auto &missile : Missiles) {
+		// Search the missile that will restore the original monster mode and use the saved/original monster mode from it
+		if (missile._mitype == MissileID::StoneCurse && missile.var2 == monsterId) {
+			return static_cast<MonsterMode>(missile.var1);
+		}
+	}
+	return MonsterMode::Petrified;
 }
 
 unsigned int Monster::toHitSpecial(_difficulty difficulty) const

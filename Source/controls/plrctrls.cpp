@@ -482,6 +482,20 @@ void FindTrigger()
 	CheckRportal();
 }
 
+bool IsStandingGround()
+{
+	if (ControlMode == ControlTypes::Gamepad) {
+		ControllerButtonCombo standGroundCombo = sgOptions.Padmapper.ButtonComboForAction("StandGround");
+		return StandToggle || IsControllerButtonComboPressed(standGroundCombo);
+	}
+#ifndef USE_SDL1
+	if (ControlMode == ControlTypes::VirtualGamepad) {
+		return VirtualGamepadState.standButton.isHeld;
+	}
+#endif
+	return false;
+}
+
 void Interact()
 {
 	if (leveltype == DTYPE_TOWN && pcursmonst != -1) {
@@ -489,20 +503,9 @@ void Interact()
 		return;
 	}
 
-	bool stand = StandToggle;
-#ifndef USE_SDL1
-	if (ControlMode == ControlTypes::Gamepad) {
-		ControllerButtonCombo standGroundCombo = sgOptions.Padmapper.ButtonComboForAction("StandGround");
-		stand = IsControllerButtonComboPressed(standGroundCombo);
-	}
-	if (ControlMode == ControlTypes::VirtualGamepad) {
-		stand = VirtualGamepadState.standButton.isHeld;
-	}
-#endif
-
 	Player &myPlayer = *MyPlayer;
 
-	if (leveltype != DTYPE_TOWN && stand) {
+	if (leveltype != DTYPE_TOWN && IsStandingGround()) {
 		Direction pdir = myPlayer._pdir;
 		AxisDirection moveDir = GetMoveDirection();
 		bool motion = moveDir.x != AxisDirectionX_NONE || moveDir.y != AxisDirectionY_NONE;
@@ -1303,15 +1306,11 @@ void WalkInDir(size_t playerId, AxisDirection dir)
 	if (!player.isWalking() && player.CanChangeAction())
 		player._pdir = pdir;
 
-#ifndef USE_SDL1
-	if (ControlMode == ControlTypes::VirtualGamepad) {
-		if (VirtualGamepadState.standButton.isHeld) {
-			if (player._pmode == PM_STAND)
-				StartStand(player, pdir);
-			return;
-		}
+	if (IsStandingGround()) {
+		if (player._pmode == PM_STAND)
+			StartStand(player, pdir);
+		return;
 	}
-#endif
 
 	if (PosOkPlayer(player, delta) && IsPathBlocked(player.position.future, pdir)) {
 		if (player._pmode == PM_STAND)
@@ -1626,19 +1625,16 @@ void ProcessGameAction(const GameAction &action)
 				DoSpeedBook();
 			else
 				spselflag = false;
-			chrflag = false;
+			CloseCharPanel();
 			QuestLogIsOpen = false;
 			sbookflag = false;
 			CloseGoldWithdraw();
-			IsStashOpen = false;
+			CloseStash();
 		}
 		break;
 	case GameActionType_TOGGLE_CHARACTER_INFO:
-		chrflag = !chrflag;
+		ToggleCharPanel();
 		if (chrflag) {
-			QuestLogIsOpen = false;
-			CloseGoldWithdraw();
-			IsStashOpen = false;
 			spselflag = false;
 			if (pcurs == CURSOR_DISARM)
 				NewCursor(CURSOR_HAND);
@@ -1648,9 +1644,9 @@ void ProcessGameAction(const GameAction &action)
 	case GameActionType_TOGGLE_QUEST_LOG:
 		if (!QuestLogIsOpen) {
 			StartQuestlog();
-			chrflag = false;
+			CloseCharPanel();
 			CloseGoldWithdraw();
-			IsStashOpen = false;
+			CloseStash();
 			spselflag = false;
 		} else {
 			QuestLogIsOpen = false;
@@ -1747,6 +1743,11 @@ bool IsPointAndClick()
 	return PointAndClickState;
 }
 
+bool IsMovementHandlerActive()
+{
+	return GetLeftStickOrDPadGameUIHandler() != nullptr;
+}
+
 void plrctrls_after_check_curs_move()
 {
 	// check for monsters first, then items, then towners.
@@ -1807,12 +1808,12 @@ void UseBeltItem(int type)
 			continue;
 		}
 
-		bool isRejuvenation = IsAnyOf(item._iMiscId, IMISC_REJUV, IMISC_FULLREJUV);
+		bool isRejuvenation = IsAnyOf(item._iMiscId, IMISC_REJUV, IMISC_FULLREJUV) || (item._iMiscId == IMISC_ARENAPOT && MyPlayer->isOnArenaLevel());
 		bool isHealing = isRejuvenation || IsAnyOf(item._iMiscId, IMISC_HEAL, IMISC_FULLHEAL) || item.isScrollOf(SpellID::Healing);
 		bool isMana = isRejuvenation || IsAnyOf(item._iMiscId, IMISC_MANA, IMISC_FULLMANA);
 
 		if ((type == BLT_HEALING && isHealing) || (type == BLT_MANA && isMana)) {
-			UseInvItem(MyPlayerId, INVITEM_BELT_FIRST + i);
+			UseInvItem(INVITEM_BELT_FIRST + i);
 			break;
 		}
 	}
@@ -2046,7 +2047,7 @@ void CtrlUseInvItem()
 	if (item.isEquipment()) {
 		CheckInvItem(true, false); // auto-equip if it's an equipment
 	} else {
-		UseInvItem(MyPlayerId, pcursinvitem);
+		UseInvItem(pcursinvitem);
 	}
 	if (itemId != GetItemIdOnSlot(Slot)) {
 		ResetInvCursorPosition();

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <random>
 
 #include <fmt/format.h>
@@ -91,11 +92,17 @@ void RenderDifficultyIndicators()
 {
 	if (!selhero_isSavegame)
 		return;
-	const uint16_t width = (*DifficultyIndicator[0])[0].width();
-	const uint16_t height = (*DifficultyIndicator[0])[0].height();
-	SDL_Rect rect = MakeSdlRect(SELHERO_DIALOG_HERO_IMG->m_rect.x, SELHERO_DIALOG_HERO_IMG->m_rect.y - height - 2, width, height);
+	const uint16_t width = (*DifficultyIndicator)[0].width();
+	const uint16_t height = (*DifficultyIndicator)[0].height();
+	SDL_Rect rect = MakeSdlRect(
+	    SELHERO_DIALOG_HERO_IMG->m_rect.x + 1,
+	    SELHERO_DIALOG_HERO_IMG->m_rect.y + SELHERO_DIALOG_HERO_IMG->m_rect.h - height - 1,
+	    width,
+	    height);
 	for (int i = 0; i <= DIFF_LAST; i++) {
-		UiRenderItem(UiImageClx((*DifficultyIndicator[i < selhero_heroInfo.herorank ? 0 : 1])[0], rect, UiFlags::None));
+		if (i >= selhero_heroInfo.herorank)
+			break;
+		UiRenderItem(UiImageClx((*DifficultyIndicator)[0], rect, UiFlags::None));
 		rect.x += width;
 	}
 }
@@ -177,6 +184,7 @@ void SelheroListSelect(int value)
 		selhero_heroInfo.saveNumber = pfile_ui_get_first_unused_save_num();
 		SelheroSetStats();
 		title = selhero_isMultiPlayer ? _("New Multi Player Hero").data() : _("New Single Player Hero").data();
+		selhero_isSavegame = false;
 		return;
 	}
 

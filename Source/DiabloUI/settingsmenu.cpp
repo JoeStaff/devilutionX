@@ -1,5 +1,7 @@
 #include "selstart.h"
 
+#include <cstdint>
+
 #include <function_ref.hpp>
 
 #include "DiabloUI/diabloui.h"
@@ -318,7 +320,7 @@ void FullscreenChanged()
 
 	for (auto &vecItem : vecDialogItems) {
 		int vecItemValue = vecItem->m_value;
-		if (vecItemValue < 0)
+		if (vecItemValue < 0 || vecItemValue >= vecOptions.size())
 			continue;
 
 		auto *pOption = vecOptions[vecItemValue];
@@ -479,7 +481,7 @@ void UiSettingsMenu()
 
 				StaticVector<ControllerButtonEvent, 4> ctrlEvents = ToControllerButtonEvents(event);
 				for (ControllerButtonEvent ctrlEvent : ctrlEvents) {
-					bool isGamepadMotion = ProcessControllerMotion(event, ctrlEvent);
+					bool isGamepadMotion = IsControllerMotion(event);
 					DetectInputMethod(event, ctrlEvent);
 					if (event.type == SDL_KEYUP && event.key.keysym.sym == SDLK_ESCAPE) {
 						StopPadEntryTimer();

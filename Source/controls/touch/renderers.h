@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 #include <SDL.h>
 
 #include "controls/plrctrls.h"
@@ -47,6 +49,7 @@ enum VirtualGamepadPotionType : uint8_t {
 	GAMEPAD_FULL_HEALING,
 	GAMEPAD_FULL_MANA,
 	GAMEPAD_FULL_REJUVENATION,
+	GAMEPAD_ARENA_POTION,
 	GAMEPAD_SCROLL_OF_HEALING,
 };
 

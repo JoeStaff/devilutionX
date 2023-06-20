@@ -1,4 +1,7 @@
+#include "levels/drlg_l3.h"
+
 #include <algorithm>
+#include <cstdint>
 
 #include "engine/load_file.hpp"
 #include "engine/points_in_rectangle_range.hpp"
@@ -1683,7 +1686,7 @@ void Fence()
 	for (WorldTileCoord j = 1; j < DMAXY; j++) {     // BUGFIX: Change '0' to '1' (fixed)
 		for (WorldTileCoord i = 1; i < DMAXX; i++) { // BUGFIX: Change '0' to '1' (fixed)
 			// note the comma operator is used here to advance the RNG state
-			if (dungeon[i][j] == 7 && (AdvanceRndSeed(), !IsNearThemeRoom({ i, j }))) {
+			if (dungeon[i][j] == 7 && (DiscardRandomValues(1), !IsNearThemeRoom({ i, j }))) {
 				if (FlipCoin()) {
 					int y1 = j;
 					// BUGFIX: Check `y1 >= 0` first (fixed)
@@ -2150,11 +2153,11 @@ void PlaceCaveLights()
 	for (int j = 0; j < MAXDUNY; j++) {
 		for (int i = 0; i < MAXDUNX; i++) {
 			if (dPiece[i][j] >= 55 && dPiece[i][j] <= 146) {
-				DoLighting({ i, j }, 7, -1);
+				DoLighting({ i, j }, 7, {});
 			} else if (dPiece[i][j] >= 153 && dPiece[i][j] <= 160) {
-				DoLighting({ i, j }, 7, -1);
+				DoLighting({ i, j }, 7, {});
 			} else if (IsAnyOf(dPiece[i][j], 149, 151)) {
-				DoLighting({ i, j }, 7, -1);
+				DoLighting({ i, j }, 7, {});
 			}
 		}
 	}
@@ -2166,7 +2169,7 @@ void PlaceHiveLights()
 	for (int j = 0; j < MAXDUNY; j++) {
 		for (int i = 0; i < MAXDUNX; i++) {
 			if (dPiece[i][j] >= 381 && dPiece[i][j] <= 456) {
-				DoLighting({ i, j }, 9, -1);
+				DoLighting({ i, j }, 9, {});
 			}
 		}
 	}

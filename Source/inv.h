@@ -96,6 +96,7 @@ bool CanBePlacedOnBelt(const Item &item);
 using ItemFunc = void (*)(Item &);
 
 void CloseInventory();
+void CloseStash();
 void FreeInvGFX();
 void InitInv();
 
@@ -208,8 +209,8 @@ void AutoGetItem(Player &player, Item *itemPointer, int ii);
  * @param ci Flags used to describe the specific subtype of the target item
  * @return An index into ActiveItems or -1 if no matching item was found
  */
-int FindGetItem(int32_t iseed, _item_indexes idx, uint16_t ci);
-void SyncGetItem(Point position, int32_t iseed, _item_indexes idx, uint16_t ci);
+int FindGetItem(uint32_t iseed, _item_indexes idx, uint16_t ci);
+void SyncGetItem(Point position, uint32_t iseed, _item_indexes idx, uint16_t ci);
 
 /**
  * @brief Checks if the tile has room for an item
@@ -218,15 +219,17 @@ void SyncGetItem(Point position, int32_t iseed, _item_indexes idx, uint16_t ci);
  */
 bool CanPut(Point position);
 
-int InvPutItem(const Player &player, Point position, const Item &item);
-int SyncDropItem(Point position, _item_indexes idx, uint16_t icreateinfo, int iseed, int id, int dur, int mdur, int ch, int mch, int ivalue, uint32_t ibuff, int toHit, int maxDam, int minStr, int minMag, int minDex, int ac);
-int SyncDropEar(Point position, uint16_t icreateinfo, int iseed, uint8_t cursval, string_view heroname);
+int ClampDurability(const Item &item, int durability);
+int16_t ClampToHit(const Item &item, int16_t toHit);
+uint8_t ClampMaxDam(const Item &item, uint8_t maxDam);
+int SyncDropItem(Point position, _item_indexes idx, uint16_t icreateinfo, int iseed, int id, int dur, int mdur, int ch, int mch, int ivalue, uint32_t ibuff, int toHit, int maxDam);
+int SyncDropEar(Point position, uint16_t icreateinfo, uint32_t iseed, uint8_t cursval, string_view heroname);
 int8_t CheckInvHLight();
 bool CanUseScroll(Player &player, SpellID spell);
 void ConsumeStaffCharge(Player &player);
 bool CanUseStaff(Player &player, SpellID spellId);
 Item &GetInventoryItem(Player &player, int location);
-bool UseInvItem(size_t pnum, int cii);
+bool UseInvItem(int cii);
 void DoTelekinesis();
 int CalculateGold(Player &player);
 

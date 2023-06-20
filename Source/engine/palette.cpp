@@ -5,6 +5,8 @@
  */
 #include "engine/palette.h"
 
+#include <cstdint>
+
 #include <fmt/core.h>
 
 #include "engine/backbuffer_state.hpp"
@@ -19,10 +21,10 @@
 
 namespace devilution {
 
-SDL_Color logical_palette[256];
-SDL_Color system_palette[256];
-SDL_Color orig_palette[256];
-Uint8 paletteTransparencyLookup[256][256];
+std::array<SDL_Color, 256> logical_palette;
+std::array<SDL_Color, 256> system_palette;
+std::array<SDL_Color, 256> orig_palette;
+std::array<std::array<Uint8, 256>, 256> paletteTransparencyLookup;
 
 #if DEVILUTIONX_PALETTE_TRANSPARENCY_BLACK_16_LUT
 uint16_t paletteTransparencyLookupBlack16[65536];
@@ -40,7 +42,7 @@ void LoadGamma()
 	sgOptions.Graphics.gammaCorrection.SetValue(gammaValue - gammaValue % 5);
 }
 
-Uint8 FindBestMatchForColor(SDL_Color *palette, SDL_Color color, int skipFrom, int skipTo)
+Uint8 FindBestMatchForColor(std::array<SDL_Color, 256> &palette, SDL_Color color, int skipFrom, int skipTo)
 {
 	Uint8 best;
 	Uint32 bestDiff = SDL_MAX_UINT32;
@@ -73,7 +75,7 @@ Uint8 FindBestMatchForColor(SDL_Color *palette, SDL_Color color, int skipFrom, i
  * @param skipTo Do not use colors between skipFrom and this index
  * @param toUpdate Only update the first n colors
  */
-void GenerateBlendedLookupTable(SDL_Color *palette, int skipFrom, int skipTo, int toUpdate = 256)
+void GenerateBlendedLookupTable(std::array<SDL_Color, 256> &palette, int skipFrom, int skipTo, int toUpdate = 256)
 {
 	for (int i = 0; i < 256; i++) {
 		for (int j = 0; j < 256; j++) {
@@ -119,28 +121,13 @@ void GenerateBlendedLookupTable(SDL_Color *palette, int skipFrom, int skipTo, in
  */
 void CycleColors(int from, int to)
 {
-	{
-		SDL_Color col = system_palette[from];
-		for (int i = from; i < to; i++) {
-			system_palette[i] = system_palette[i + 1];
-		}
-		system_palette[to] = col;
-	}
+	std::rotate(system_palette.begin() + from, system_palette.begin() + from + 1, system_palette.begin() + to + 1);
 
 	for (auto &palette : paletteTransparencyLookup) {
-		Uint8 col = palette[from];
-		for (int j = from; j < to; j++) {
-			palette[j] = palette[j + 1];
-		}
-		palette[to] = col;
+		std::rotate(palette.begin() + from, palette.begin() + from + 1, palette.begin() + to + 1);
 	}
 
-	Uint8 colRow[256];
-	memcpy(colRow, &paletteTransparencyLookup[from], sizeof(*paletteTransparencyLookup));
-	for (int i = from; i < to; i++) {
-		memcpy(&paletteTransparencyLookup[i], &paletteTransparencyLookup[i + 1], sizeof(*paletteTransparencyLookup));
-	}
-	memcpy(&paletteTransparencyLookup[to], colRow, sizeof(colRow));
+	std::rotate(paletteTransparencyLookup.begin() + from, paletteTransparencyLookup.begin() + from + 1, paletteTransparencyLookup.begin() + to + 1);
 }
 
 /**
@@ -150,28 +137,13 @@ void CycleColors(int from, int to)
  */
 void CycleColorsReverse(int from, int to)
 {
-	{
-		SDL_Color col = system_palette[to];
-		for (int i = to; i > from; i--) {
-			system_palette[i] = system_palette[i - 1];
-		}
-		system_palette[from] = col;
-	}
+	std::rotate(system_palette.begin() + from, system_palette.begin() + to, system_palette.begin() + to + 1);
 
 	for (auto &palette : paletteTransparencyLookup) {
-		Uint8 col = palette[to];
-		for (int j = to; j > from; j--) {
-			palette[j] = palette[j - 1];
-		}
-		palette[from] = col;
+		std::rotate(palette.begin() + from, palette.begin() + to, palette.begin() + to + 1);
 	}
 
-	Uint8 colRow[256];
-	memcpy(colRow, &paletteTransparencyLookup[to], sizeof(*paletteTransparencyLookup));
-	for (int i = to; i > from; i--) {
-		memcpy(&paletteTransparencyLookup[i], &paletteTransparencyLookup[i - 1], sizeof(*paletteTransparencyLookup));
-	}
-	memcpy(&paletteTransparencyLookup[from], colRow, sizeof(colRow));
+	std::rotate(paletteTransparencyLookup.begin() + from, paletteTransparencyLookup.begin() + to, paletteTransparencyLookup.begin() + to + 1);
 }
 
 } // namespace
@@ -182,13 +154,13 @@ void palette_update(int first, int ncolor)
 		return;
 
 	assert(Palette);
-	if (SDLC_SetSurfaceAndPaletteColors(PalSurface, Palette.get(), system_palette, first, ncolor) < 0) {
+	if (SDLC_SetSurfaceAndPaletteColors(PalSurface, Palette.get(), system_palette.data(), first, ncolor) < 0) {
 		ErrSdl();
 	}
 	pal_surface_palette_version++;
 }
 
-void ApplyGamma(SDL_Color *dst, const SDL_Color *src, int n)
+void ApplyGamma(std::array<SDL_Color, 256> &dst, const std::array<SDL_Color, 256> &src, int n)
 {
 	double g = *sgOptions.Graphics.gammaCorrection / 100.0;
 
@@ -203,7 +175,7 @@ void ApplyGamma(SDL_Color *dst, const SDL_Color *src, int n)
 void palette_init()
 {
 	LoadGamma();
-	memcpy(system_palette, orig_palette, sizeof(orig_palette));
+	system_palette = orig_palette;
 	InitPalette();
 }
 
@@ -302,7 +274,7 @@ int UpdateGamma(int gamma)
 	return 130 - *sgOptions.Graphics.gammaCorrection;
 }
 
-void SetFadeLevel(int fadeval)
+void SetFadeLevel(int fadeval, bool updateHardwareCursor)
 {
 	if (HeadlessMode)
 		return;
@@ -313,14 +285,17 @@ void SetFadeLevel(int fadeval)
 		system_palette[i].b = (fadeval * logical_palette[i].b) / 256;
 	}
 	palette_update();
-	if (IsHardwareCursor()) {
+	if (updateHardwareCursor && IsHardwareCursor()) {
 		ReinitializeHardwareCursor();
 	}
 }
 
 void BlackPalette()
 {
-	SetFadeLevel(0);
+	// With fade level 0 updating the hardware cursor may be redundant
+	// since everything is black. The caller should update the cursor
+	// when needed instead.
+	SetFadeLevel(0, /*updateHardwareCursor=*/false);
 }
 
 void PaletteFadeIn(int fr)
@@ -338,7 +313,8 @@ void PaletteFadeIn(int fr)
 		uint32_t prevFadeValue = 255;
 		for (uint32_t i = 0; i < 256; i = fr * (SDL_GetTicks() - tc) / 50) {
 			if (i != prevFadeValue) {
-				SetFadeLevel(i);
+				// We can skip hardware cursor update for fade level 0 (everything is black).
+				SetFadeLevel(i, /*updateHardwareCursor=*/i != 0u);
 				prevFadeValue = i;
 			}
 			BltFast(nullptr, nullptr);
@@ -351,7 +327,7 @@ void PaletteFadeIn(int fr)
 		RenderPresent();
 	}
 
-	memcpy(logical_palette, orig_palette, sizeof(orig_palette));
+	logical_palette = orig_palette;
 
 	sgbFadedIn = true;
 }

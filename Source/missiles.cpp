@@ -6,6 +6,7 @@
 #include "missiles.h"
 
 #include <climits>
+#include <cstdint>
 
 #include "control.h"
 #include "controls/plrctrls.h"
@@ -442,11 +443,11 @@ void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int
 					isPlayerHit = Plr2PlrMHit(Players[missile._misource], pid - 1, minDamage, maxDamage, missile._midist, missile._mitype, damageType, isDamageShifted, &blocked);
 			} else {
 				Monster &monster = Monsters[missile._misource];
-				isPlayerHit = PlayerMHit(pid - 1, &monster, missile._midist, minDamage, maxDamage, missile._mitype, damageType, isDamageShifted, 0, &blocked);
+				isPlayerHit = PlayerMHit(pid - 1, &monster, missile._midist, minDamage, maxDamage, missile._mitype, damageType, isDamageShifted, DeathReason::MonsterOrTrap, &blocked);
 			}
 		} else {
-			int earflag = (!missile.IsTrap() && (missile._miAnimType == MissileGraphicID::FireWall || missile._miAnimType == MissileGraphicID::Lightning)) ? 1 : 0;
-			isPlayerHit = PlayerMHit(pid - 1, nullptr, missile._midist, minDamage, maxDamage, missile._mitype, damageType, isDamageShifted, earflag, &blocked);
+			DeathReason deathReason = (!missile.IsTrap() && (missile._miAnimType == MissileGraphicID::FireWall || missile._miAnimType == MissileGraphicID::Lightning)) ? DeathReason::Player : DeathReason::MonsterOrTrap;
+			isPlayerHit = PlayerMHit(pid - 1, nullptr, missile._midist, minDamage, maxDamage, missile._mitype, damageType, isDamageShifted, deathReason, &blocked);
 		}
 	}
 
@@ -968,7 +969,7 @@ bool MonsterTrapHit(int monsterId, int mindam, int maxdam, int dist, MissileID t
 	return true;
 }
 
-bool PlayerMHit(int pnum, Monster *monster, int dist, int mind, int maxd, MissileID mtype, DamageType damageType, bool shift, int earflag, bool *blocked)
+bool PlayerMHit(int pnum, Monster *monster, int dist, int mind, int maxd, MissileID mtype, DamageType damageType, bool shift, DeathReason deathReason, bool *blocked)
 {
 	*blocked = false;
 
@@ -1087,7 +1088,7 @@ bool PlayerMHit(int pnum, Monster *monster, int dist, int mind, int maxd, Missil
 	if (resper > 0) {
 		dam -= dam * resper / 100;
 		if (&player == MyPlayer) {
-			ApplyPlrDamage(damageType, player, 0, 0, dam, earflag);
+			ApplyPlrDamage(damageType, player, 0, 0, dam, deathReason);
 		}
 
 		if (player._pHitPoints >> 6 > 0) {
@@ -1097,7 +1098,7 @@ bool PlayerMHit(int pnum, Monster *monster, int dist, int mind, int maxd, Missil
 	}
 
 	if (&player == MyPlayer) {
-		ApplyPlrDamage(damageType, player, 0, 0, dam, earflag);
+		ApplyPlrDamage(damageType, player, 0, 0, dam, deathReason);
 	}
 
 	if (player._pHitPoints >> 6 > 0) {
@@ -2295,6 +2296,13 @@ void AddStoneCurse(Missile &missile, AddMissileParameter &parameter)
 	// Petrify the targeted monster
 	int monsterId = abs(dMonster[targetMonsterPosition->x][targetMonsterPosition->y]) - 1;
 	auto &monster = Monsters[monsterId];
+
+	if (monster.mode == MonsterMode::Petrified) {
+		// Monster is already petrified and StoneCurse doesn't stack
+		missile._miDelFlag = true;
+		return;
+	}
+
 	missile.var1 = static_cast<int>(monster.mode);
 	missile.var2 = monsterId;
 	monster.petrify();
@@ -2460,12 +2468,11 @@ void AddFlameWaveControl(Missile &missile, AddMissileParameter &parameter)
 
 void AddNova(Missile &missile, AddMissileParameter &parameter)
 {
-	Player &player = Players[missile._misource];
-
 	missile.var1 = parameter.dst.x;
 	missile.var2 = parameter.dst.y;
 
 	if (!missile.IsTrap()) {
+		Player &player = Players[missile._misource];
 		int dmg = GenerateRndSum(6, 5) + player._pLevel + 5;
 		missile._midam = ScaleSpellEffect(dmg / 2, missile._mispllvl);
 	} else {
@@ -3623,8 +3630,8 @@ void ProcessTeleport(Missile &missile)
 	missile.var1 = 1;
 	dPlayer[player.position.tile.x][player.position.tile.y] = id + 1;
 	if (leveltype != DTYPE_TOWN) {
-		ChangeLightXY(player._plid, player.position.tile);
-		ChangeVisionXY(player._pvid, player.position.tile);
+		ChangeLightXY(player.lightId, player.position.tile);
+		ChangeVisionXY(player.getId(), player.position.tile);
 	}
 	if (&player == MyPlayer) {
 		ViewPosition = player.position.tile;

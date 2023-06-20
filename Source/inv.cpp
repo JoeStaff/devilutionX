@@ -3,9 +3,10 @@
  *
  * Implementation of player inventory.
  */
+#include <algorithm>
+#include <cstdint>
 #include <utility>
 
-#include <algorithm>
 #include <fmt/format.h>
 
 #include "DiabloUI/ui_flags.hpp"
@@ -259,7 +260,7 @@ void ChangeEquipment(Player &player, inv_body_loc bodyLocation, const Item &item
 	player.InvBody[bodyLocation] = item;
 
 	if (&player == MyPlayer) {
-		NetSendCmdChItem(false, bodyLocation);
+		NetSendCmdChItem(false, bodyLocation, true);
 	}
 }
 
@@ -866,7 +867,9 @@ void CheckQuestItem(Player &player, Item &questItem)
 {
 	Player &myPlayer = *MyPlayer;
 
-	if (questItem.IDidx == IDI_OPTAMULET && Quests[Q_BLIND]._qactive == QUEST_ACTIVE) {
+	if (Quests[Q_BLIND]._qactive == QUEST_ACTIVE
+	    && (questItem.IDidx == IDI_OPTAMULET
+	        || (gbIsMultiplayer && Quests[Q_BLIND].IsAvailable() && questItem.position == (SetPiece.position.megaToWorld() + Displacement { 5, 5 })))) {
 		Quests[Q_BLIND]._qactive = QUEST_DONE;
 		NetSendCmdQuest(true, Quests[Q_BLIND]);
 	}
@@ -901,14 +904,15 @@ void CheckQuestItem(Player &player, Item &questItem)
 		}
 	}
 
-	if (questItem.IDidx == IDI_ARMOFVAL && Quests[Q_BLOOD]._qactive == QUEST_ACTIVE) {
+	if (Quests[Q_BLOOD]._qactive == QUEST_ACTIVE
+	    && (questItem.IDidx == IDI_ARMOFVAL
+	        || (gbIsMultiplayer && Quests[Q_BLOOD].IsAvailable() && questItem.position == (SetPiece.position.megaToWorld() + Displacement { 9, 3 })))) {
 		Quests[Q_BLOOD]._qactive = QUEST_DONE;
 		NetSendCmdQuest(true, Quests[Q_BLOOD]);
 		myPlayer.Say(HeroSpeech::MayTheSpiritOfArkaineProtectMe, 20);
 	}
 
 	if (questItem.IDidx == IDI_MAPOFDOOM) {
-		Quests[Q_GRAVE]._qlog = false;
 		Quests[Q_GRAVE]._qactive = QUEST_ACTIVE;
 		if (Quests[Q_GRAVE]._qvar1 != 1) {
 			MyPlayer->Say(HeroSpeech::UhHuh, 10);
@@ -1015,13 +1019,13 @@ void InvDrawSlotBack(const Surface &out, Point targetPosition, Size size, item_q
 			if (pix >= PAL16_GRAY) {
 				switch (itemQuality) {
 				case ITEM_QUALITY_MAGIC:
-					pix -= PAL16_GRAY - PAL16_BLUE - 1;
+					pix -= PAL16_GRAY - (!IsInspectingPlayer() ? PAL16_BLUE : PAL16_ORANGE) - 1;
 					break;
 				case ITEM_QUALITY_UNIQUE:
-					pix -= PAL16_GRAY - PAL16_YELLOW - 1;
+					pix -= PAL16_GRAY - (!IsInspectingPlayer() ? PAL16_YELLOW : PAL16_ORANGE) - 1;
 					break;
 				default:
-					pix -= PAL16_GRAY - PAL16_BEIGE - 1;
+					pix -= PAL16_GRAY - (!IsInspectingPlayer() ? PAL16_BEIGE : PAL16_ORANGE) - 1;
 					break;
 				}
 			}
@@ -1087,7 +1091,7 @@ void DrawInv(const Surface &out)
 		{ 133, 160 }, // chest
 	};
 
-	Player &myPlayer = *MyPlayer;
+	Player &myPlayer = *InspectPlayer;
 
 	for (int slot = INVLOC_HEAD; slot < NUM_INVLOC; slot++) {
 		if (!myPlayer.InvBody[slot].isEmpty()) {
@@ -1163,7 +1167,7 @@ void DrawInvBelt(const Surface &out)
 
 	DrawPanelBox(out, { 205, 21, 232, 28 }, mainPanelPosition + Displacement { 205, 5 });
 
-	Player &myPlayer = *MyPlayer;
+	Player &myPlayer = *InspectPlayer;
 
 	for (int i = 0; i < MaxBeltItems; i++) {
 		if (myPlayer.SpdList[i].isEmpty()) {
@@ -1522,6 +1526,8 @@ void TransferItemToStash(Player &player, int location)
 
 void CheckInvItem(bool isShiftHeld, bool isCtrlHeld)
 {
+	if (IsInspectingPlayer())
+		return;
 	if (!MyPlayer->HoldItem.isEmpty()) {
 		CheckInvPaste(*MyPlayer, MousePosition);
 	} else if (IsStashOpen && isCtrlHeld) {
@@ -1664,10 +1670,10 @@ void AutoGetItem(Player &player, Item *itemPointer, int ii)
 		player.Say(HeroSpeech::ICantCarryAnymore);
 	}
 	RespawnItem(item, true);
-	NetSendCmdPItem(true, CMD_RESPAWNITEM, item.position, item);
+	NetSendCmdPItem(true, CMD_SPAWNITEM, item.position, item);
 }
 
-int FindGetItem(int32_t iseed, _item_indexes idx, uint16_t createInfo)
+int FindGetItem(uint32_t iseed, _item_indexes idx, uint16_t createInfo)
 {
 	for (uint8_t i = 0; i < ActiveItemCount; i++) {
 		auto &item = Items[ActiveItems[i]];
@@ -1679,7 +1685,7 @@ int FindGetItem(int32_t iseed, _item_indexes idx, uint16_t createInfo)
 	return -1;
 }
 
-void SyncGetItem(Point position, int32_t iseed, _item_indexes idx, uint16_t ci)
+void SyncGetItem(Point position, uint32_t iseed, _item_indexes idx, uint16_t ci)
 {
 	// Check what the local client has at the target position
 	int ii = dItem[position.x][position.y] - 1;
@@ -1740,85 +1746,62 @@ bool CanPut(Point position)
 	return true;
 }
 
-int InvPutItem(const Player &player, Point position, const Item &item)
+int ClampDurability(const Item &item, int durability)
 {
-	std::optional<Point> itemTile = FindAdjacentPositionForItem(player.position.tile, GetDirection(player.position.tile, position));
-	if (!itemTile)
-		return -1;
+	if (item._iMaxDur == 0)
+		return 0;
 
-	int ii = AllocateItem();
-
-	dItem[itemTile->x][itemTile->y] = ii + 1;
-	Items[ii] = item;
-	Items[ii].position = *itemTile;
-	RespawnItem(Items[ii], true);
-
-	if (CornerStone.isAvailable() && *itemTile == CornerStone.position) {
-		CornerStone.item = Items[ii];
-		InitQTextMsg(TEXT_CORNSTN);
-		Quests[Q_CORNSTN]._qlog = false;
-		Quests[Q_CORNSTN]._qactive = QUEST_DONE;
-	}
-
-	return ii;
+	return clamp<int>(durability, 1, item._iMaxDur);
 }
 
-int SyncDropItem(Point position, _item_indexes idx, uint16_t icreateinfo, int iseed, int id, int dur, int mdur, int ch, int mch, int ivalue, uint32_t ibuff, int toHit, int maxDam, int minStr, int minMag, int minDex, int ac)
+int16_t ClampToHit(const Item &item, int16_t toHit)
+{
+	if (toHit < item._iPLToHit || toHit > 51)
+		return item._iPLToHit;
+
+	return toHit;
+}
+
+uint8_t ClampMaxDam(const Item &item, uint8_t maxDam)
+{
+	if (maxDam < item._iMaxDam || maxDam - item._iMinDam > 30)
+		return item._iMaxDam;
+
+	return maxDam;
+}
+
+int SyncDropItem(Point position, _item_indexes idx, uint16_t icreateinfo, int iseed, int id, int dur, int mdur, int ch, int mch, int ivalue, uint32_t ibuff, int toHit, int maxDam)
 {
 	if (ActiveItemCount >= MAXITEMS)
 		return -1;
 
-	int ii = AllocateItem();
-	auto &item = Items[ii];
-
-	dItem[position.x][position.y] = ii + 1;
+	Item item;
 
 	RecreateItem(*MyPlayer, item, idx, icreateinfo, iseed, ivalue, (ibuff & CF_HELLFIRE) != 0);
 	if (id != 0)
 		item._iIdentified = true;
-	item._iDurability = dur;
 	item._iMaxDur = mdur;
-	item._iCharges = ch;
-	item._iMaxCharges = mch;
-	item._iPLToHit = toHit;
-	item._iMaxDam = maxDam;
-	item._iMinStr = minStr;
-	item._iMinMag = minMag;
-	item._iMinDex = minDex;
-	item._iAC = ac;
-	item.dwBuff = ibuff;
-	item.position = position;
-	RespawnItem(item, true);
-
-	if (CornerStone.isAvailable() && position == CornerStone.position) {
-		CornerStone.item = item;
-		InitQTextMsg(TEXT_CORNSTN);
-		Quests[Q_CORNSTN]._qlog = false;
-		Quests[Q_CORNSTN]._qactive = QUEST_DONE;
+	item._iDurability = ClampDurability(item, dur);
+	item._iMaxCharges = clamp<int>(mch, 0, item._iMaxCharges);
+	item._iCharges = clamp<int>(ch, 0, item._iMaxCharges);
+	if (gbIsHellfire) {
+		item._iPLToHit = ClampToHit(item, toHit);
+		item._iMaxDam = ClampMaxDam(item, maxDam);
 	}
-	return ii;
+	item.dwBuff = ibuff;
+
+	return PlaceItemInWorld(std::move(item), position);
 }
 
-int SyncDropEar(Point position, uint16_t icreateinfo, int iseed, uint8_t cursval, string_view heroname)
+int SyncDropEar(Point position, uint16_t icreateinfo, uint32_t iseed, uint8_t cursval, string_view heroname)
 {
 	if (ActiveItemCount >= MAXITEMS)
 		return -1;
 
-	int ii = AllocateItem();
-	auto &item = Items[ii];
-
-	dItem[position.x][position.y] = ii + 1;
+	Item item;
 	RecreateEar(item, icreateinfo, iseed, cursval, heroname);
-	item.position = position;
-	RespawnItem(item, true);
 
-	if (CornerStone.isAvailable() && position == CornerStone.position) {
-		CornerStone.item = item;
-		InitQTextMsg(TEXT_CORNSTN);
-		Quests[Q_CORNSTN]._qlog = false;
-		Quests[Q_CORNSTN]._qactive = QUEST_DONE;
-	}
-	return ii;
+	return PlaceItemInWorld(std::move(item), position);
 }
 
 int8_t CheckInvHLight()
@@ -1843,7 +1826,7 @@ int8_t CheckInvHLight()
 	int8_t rv = -1;
 	InfoColor = UiFlags::ColorWhite;
 	Item *pi = nullptr;
-	Player &myPlayer = *MyPlayer;
+	Player &myPlayer = *InspectPlayer;
 
 	if (r == SLOTXY_HEAD) {
 		rv = INVLOC_HEAD;
@@ -1895,11 +1878,10 @@ int8_t CheckInvHLight()
 		InfoString = fmt::format(fmt::runtime(ngettext("{:s} gold piece", "{:s} gold pieces", nGold)), FormatInteger(nGold));
 	} else {
 		InfoColor = pi->getTextColor();
+		InfoString = pi->getName();
 		if (pi->_iIdentified) {
-			InfoString = string_view(pi->_iIName);
 			PrintItemDetails(*pi);
 		} else {
-			InfoString = string_view(pi->_iName);
 			PrintItemDur(*pi);
 		}
 	}
@@ -1977,9 +1959,12 @@ Item &GetInventoryItem(Player &player, int location)
 	return player.SpdList[location - INVITEM_BELT_FIRST];
 }
 
-bool UseInvItem(size_t pnum, int cii)
+bool UseInvItem(int cii)
 {
-	Player &player = Players[pnum];
+	if (IsInspectingPlayer())
+		return false;
+
+	Player &player = *MyPlayer;
 
 	if (player._pInvincible && player._pHitPoints == 0 && &player == MyPlayer)
 		return true;
@@ -2079,13 +2064,18 @@ bool UseInvItem(size_t pnum, int cii)
 		return true;
 	}
 
+	if (item->_iMiscId == IMISC_ARENAPOT && !player.isOnArenaLevel()) {
+		player.Say(HeroSpeech::ThatWontWorkHere);
+		return true;
+	}
+
 	int idata = ItemCAnimTbl[item->_iCurs];
 	if (item->_iMiscId == IMISC_BOOK)
 		PlaySFX(IS_RBOOK);
 	else if (&player == MyPlayer)
 		PlaySFX(ItemInvSnds[idata]);
 
-	UseItem(pnum, item->_iMiscId, item->_iSpell);
+	UseItem(player.getId(), item->_iMiscId, item->_iSpell, cii);
 
 	if (speedlist) {
 		if (player.SpdList[c]._iMiscId == IMISC_NOTE) {
@@ -2095,8 +2085,6 @@ bool UseInvItem(size_t pnum, int cii)
 		}
 		if (!item->isScroll() && !item->isRune())
 			player.RemoveSpdBarItem(c);
-		else
-			player.queuedSpell.spellFrom = cii;
 		return true;
 	}
 	if (player.InvList[c]._iMiscId == IMISC_MAPOFDOOM)
@@ -2108,8 +2096,6 @@ bool UseInvItem(size_t pnum, int cii)
 	}
 	if (!item->isScroll() && !item->isRune())
 		player.RemoveInvItem(c);
-	else
-		player.queuedSpell.spellFrom = cii;
 
 	return true;
 }
@@ -2117,8 +2103,35 @@ bool UseInvItem(size_t pnum, int cii)
 void CloseInventory()
 {
 	CloseGoldWithdraw();
-	IsStashOpen = false;
+	CloseStash();
 	invflag = false;
+}
+
+void CloseStash()
+{
+	if (!IsStashOpen)
+		return;
+
+	Player &myPlayer = *MyPlayer;
+	if (!myPlayer.HoldItem.isEmpty()) {
+		std::optional<Point> itemTile = FindAdjacentPositionForItem(myPlayer.position.future, myPlayer._pdir);
+		if (itemTile) {
+			NetSendCmdPItem(true, CMD_PUTITEM, *itemTile, myPlayer.HoldItem);
+		} else {
+			if (!AutoPlaceItemInBelt(myPlayer, myPlayer.HoldItem, true)
+			    && !AutoPlaceItemInInventory(myPlayer, myPlayer.HoldItem, true)
+			    && !AutoPlaceItemInStash(myPlayer, myPlayer.HoldItem, true)) {
+				// This can fail for max gold, arena potions and a stash that has been arranged
+				// to not have room for the item all 3 cases are extremely unlikely
+				app_fatal(_("No room for item"));
+			}
+			PlaySFX(ItemInvSnds[ItemCAnimTbl[myPlayer.HoldItem._iCurs]]);
+		}
+		myPlayer.HoldItem.clear();
+		NewCursor(CURSOR_HAND);
+	}
+
+	IsStashOpen = false;
 }
 
 void DoTelekinesis()

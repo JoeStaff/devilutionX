@@ -86,7 +86,7 @@ TEST(Player, PM_DoGotHit)
 
 static void AssertPlayer(Player &player)
 {
-	ASSERT_EQ(Count8(player._pSplLvl, 64), 0);
+	ASSERT_EQ(CountU8(player._pSplLvl, 64), 0);
 	ASSERT_EQ(Count8(player.InvGrid, InventoryGridCells), 1);
 	ASSERT_EQ(CountItems(player.InvBody, NUM_INVLOC), 1);
 	ASSERT_EQ(CountItems(player.InvList, InventoryGridCells), 1);
@@ -136,7 +136,7 @@ static void AssertPlayer(Player &player)
 	ASSERT_EQ(player.queuedSpell.spellId, SpellID::Null);
 	ASSERT_EQ(player.queuedSpell.spellType, SpellType::Skill);
 	ASSERT_EQ(player.queuedSpell.spellFrom, 0);
-	ASSERT_EQ(player._pTSpell, SpellID::Null);
+	ASSERT_EQ(player.inventorySpell, SpellID::Null);
 	ASSERT_EQ(player._pRSpell, SpellID::TrapDisarm);
 	ASSERT_EQ(player._pRSplType, SpellType::Skill);
 	ASSERT_EQ(player._pSBkSpell, SpellID::Null);

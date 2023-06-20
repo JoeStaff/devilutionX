@@ -1,5 +1,7 @@
 #include "levels/drlg_l1.h"
 
+#include <cstdint>
+
 #include "engine/load_file.hpp"
 #include "engine/point.hpp"
 #include "engine/random.hpp"
@@ -701,42 +703,42 @@ void AddWall()
 				continue;
 
 			if (dungeon[i][j] == Corner) {
-				AdvanceRndSeed();
+				DiscardRandomValues(1);
 				int maxX = HorizontalWallOk({ i, j });
 				if (maxX != -1) {
 					HorizontalWall({ i, j }, HWall, maxX);
 				}
 			}
 			if (dungeon[i][j] == Corner) {
-				AdvanceRndSeed();
+				DiscardRandomValues(1);
 				int maxY = VerticalWallOk({ i, j });
 				if (maxY != -1) {
 					VerticalWall({ i, j }, VWall, maxY);
 				}
 			}
 			if (dungeon[i][j] == VWallEnd) {
-				AdvanceRndSeed();
+				DiscardRandomValues(1);
 				int maxX = HorizontalWallOk({ i, j });
 				if (maxX != -1) {
 					HorizontalWall({ i, j }, DWall, maxX);
 				}
 			}
 			if (dungeon[i][j] == HWallEnd) {
-				AdvanceRndSeed();
+				DiscardRandomValues(1);
 				int maxY = VerticalWallOk({ i, j });
 				if (maxY != -1) {
 					VerticalWall({ i, j }, DWall, maxY);
 				}
 			}
 			if (dungeon[i][j] == HWall) {
-				AdvanceRndSeed();
+				DiscardRandomValues(1);
 				int maxX = HorizontalWallOk({ i, j });
 				if (maxX != -1) {
 					HorizontalWall({ i, j }, HWall, maxX);
 				}
 			}
 			if (dungeon[i][j] == VWall) {
-				AdvanceRndSeed();
+				DiscardRandomValues(1);
 				int maxY = VerticalWallOk({ i, j });
 				if (maxY != -1) {
 					VerticalWall({ i, j }, VWall, maxY);
@@ -1120,7 +1122,7 @@ bool PlaceCathedralStairs(lvl_entry entry)
 	}
 
 	// Place stairs up
-	position = PlaceMiniSet(MyPlayer->pOriginalCathedral ? L5STAIRSUP : STAIRSUP, DMAXX * DMAXY, true);
+	position = PlaceMiniSet(MyPlayer->pOriginalCathedral && !Quests[Q_LTBANNER].IsAvailable() ? L5STAIRSUP : STAIRSUP, DMAXX * DMAXY, true);
 	if (!position) {
 		if (MyPlayer->pOriginalCathedral)
 			return false;
@@ -1298,18 +1300,19 @@ void CreateL5Dungeon(uint32_t rseed, lvl_entry entry)
 	Pass3();
 
 	if (leveltype == DTYPE_CRYPT) {
+		PlaceCryptLights();
 		SetCryptSetPieceRoom();
 	}
 }
 
 void LoadPreL1Dungeon(const char *path)
 {
-	memset(dungeon, Dirt, sizeof(dungeon));
+	InitDungeonFlags();
 
 	auto dunData = LoadFileInMem<uint16_t>(path);
 	PlaceDunTiles(dunData.get(), { 0, 0 }, Floor);
 
-	if (leveltype == DTYPE_CATHEDRAL)
+	if (setlvltype == DTYPE_CATHEDRAL)
 		FillFloor();
 
 	memcpy(pdungeon, dungeon, sizeof(pdungeon));
@@ -1319,15 +1322,17 @@ void LoadL1Dungeon(const char *path, Point spawn)
 {
 	LoadDungeonBase(path, spawn, Floor, Dirt);
 
-	if (leveltype == DTYPE_CATHEDRAL)
+	if (setlvltype == DTYPE_CATHEDRAL)
 		FillFloor();
 
 	Pass3();
 
-	if (leveltype == DTYPE_CRYPT)
+	if (setlvltype == DTYPE_CRYPT) {
 		AddCryptObjects(0, 0, MAXDUNX, MAXDUNY);
-	else
+		PlaceCryptLights();
+	} else {
 		AddL1Objs(0, 0, MAXDUNX, MAXDUNY);
+	}
 }
 
 } // namespace devilution

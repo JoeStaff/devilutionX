@@ -48,27 +48,36 @@ include(VcPkgManifestFeatures)
 # 2. Toolchain file is evaluated, required for `Platforms.cmake`,
 #    which can override the options.
 if(NOT VERSION_NUM)
-  include(functions/git)
-  get_git_tag(VERSION_NUM)
-  if(NOT "${VERSION_NUM}" STREQUAL "")
-    string(REGEX MATCH "([0-9]+\\.[0-9]+\\.[0-9]+)" VERSION_NUM ${VERSION_NUM} )
-  endif()
-  if(NOT VERSION_SUFFIX)
-    get_git_commit_hash(GIT_COMMIT_HASH)
-    set(VERSION_SUFFIX "${GIT_COMMIT_HASH}")
+  file(STRINGS "VERSION" VERSION_STR)
+  if(NOT "${VERSION_STR}" STREQUAL "")
+    string(REGEX MATCH "([0-9]+\\.[0-9]+\\.[0-9]+)(.*)?" VERSION_PREFIX ${VERSION_STR})
+    set(VERSION_NUM ${CMAKE_MATCH_1})
   endif()
 endif()
+
 if(NOT VERSION_SUFFIX)
-  set(VERSION_SUFFIX "debug")
+  # For versions with a suffix, e.g. "1.5.0-dev", include
+  # the build type and the git hash.
+  set(VERSION_SUFFIX "-$<CONFIG>")
+  if(VERSION_PREFIX MATCHES "-")
+    if(NOT GIT_COMMIT_HASH)
+      include(functions/git)
+      get_git_commit_hash(GIT_COMMIT_HASH)
+    endif()
+    if(GIT_COMMIT_HASH)
+      set(VERSION_SUFFIX "${VERSION_SUFFIX}-${GIT_COMMIT_HASH}")
+    endif()
+  else()
+    # For versions without a suffix, e.g. "1.5.0" rather than "1.5.0-dev",
+    # only include the build type if it is a debug build.
+    set(VERSION_SUFFIX "$<$<CONFIG:Debug>:$<CONFIG>>")
+  endif()
 endif()
-if(VERSION_NUM MATCHES untagged)
-  project(DevilutionX LANGUAGES C CXX)
-else()
-  project(DevilutionX
-    VERSION ${VERSION_NUM}
-    LANGUAGES C CXX)
-endif()
-set(PROJECT_VERSION_WITH_SUFFIX "${PROJECT_VERSION}$<$<CONFIG:Debug>:-${VERSION_SUFFIX}>")
+
+project(DevilutionX
+  VERSION ${VERSION_NUM}
+  LANGUAGES C CXX)
+set(PROJECT_VERSION_WITH_SUFFIX "${VERSION_PREFIX}${VERSION_SUFFIX}")
 
 # Platform definitions can override options and we want `cmake_dependent_option` to see the effects.
 # Note that a few options are still defined before this because they're needed by `VcPkgManifestFeatures.cmake`.
@@ -581,6 +590,9 @@ if(CPACK AND (APPLE OR BUILD_ASSETS_MPQ OR SRC_DIST))
       DESTINATION "share/metainfo"
       RENAME "${project_name}.metainfo.xml"
     )
+    if(DISCORD_SHARED_LIB)
+      install(FILES "${DISCORD_SHARED_LIB}" DESTINATION "lib")
+    endif()
 
     # -G DEB
     set(CPACK_PACKAGE_CONTACT "anders@jenbo.dk")

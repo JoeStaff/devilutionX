@@ -1,5 +1,6 @@
 #include "qol/stash.h"
 
+#include <cstdint>
 #include <utility>
 
 #include <fmt/format.h>
@@ -83,6 +84,11 @@ Point FindSlotUnderCursor(Point cursorPosition)
 	return InvalidStashPoint;
 }
 
+bool IsItemAllowedInStash(const Item &item)
+{
+	return item._iMiscId != IMISC_ARENAPOT;
+}
+
 void CheckStashPaste(Point cursorPosition)
 {
 	Player &player = *MyPlayer;
@@ -94,6 +100,9 @@ void CheckStashPaste(Point cursorPosition)
 		//  into an inventory grid, so compensate for the adjusted hot pixel of hardware cursors.
 		cursorPosition -= hotPixelOffset;
 	}
+
+	if (!IsItemAllowedInStash(player.HoldItem))
+		return;
 
 	if (player.HoldItem._itype == ItemType::Gold) {
 		if (Stash.gold > std::numeric_limits<int>::max() - player.HoldItem._ivalue)
@@ -437,11 +446,10 @@ uint16_t CheckStashHLight(Point mousePosition)
 	}
 
 	InfoColor = item.getTextColor();
+	InfoString = item.getName();
 	if (item._iIdentified) {
-		InfoString = string_view(item._iIName);
 		PrintItemDetails(item);
 	} else {
-		InfoString = string_view(item._iName);
 		PrintItemDur(item);
 	}
 
@@ -496,7 +504,7 @@ bool UseStashItem(uint16_t c)
 	else
 		PlaySFX(ItemInvSnds[ItemCAnimTbl[item->_iCurs]]);
 
-	UseItem(MyPlayerId, item->_iMiscId, item->_iSpell);
+	UseItem(MyPlayerId, item->_iMiscId, item->_iSpell, -1);
 
 	if (Stash.stashList[c]._iMiscId == IMISC_MAPOFDOOM)
 		return true;
@@ -670,6 +678,9 @@ void GoldWithdrawNewText(string_view text)
 
 bool AutoPlaceItemInStash(Player &player, const Item &item, bool persistItem)
 {
+	if (!IsItemAllowedInStash(item))
+		return false;
+
 	if (item._itype == ItemType::Gold) {
 		if (Stash.gold > std::numeric_limits<int>::max() - item._ivalue)
 			return false;

@@ -694,7 +694,9 @@ struct KeymapperOptions : OptionCategoryBase {
 	    unsigned index = 0);
 	void CommitActions();
 	void KeyPressed(uint32_t key) const;
-	void KeyReleased(uint32_t key) const;
+	void KeyReleased(SDL_Keycode key) const;
+	bool IsTextEntryKey(SDL_Keycode vkey) const;
+	bool IsNumberEntryKey(SDL_Keycode vkey) const;
 	string_view KeyNameForAction(string_view actionName) const;
 	uint32_t KeyForAction(string_view actionName) const;
 
@@ -729,6 +731,7 @@ struct PadmapperOptions : OptionCategoryBase {
 		void SaveToIni(string_view category) const override;
 
 		[[nodiscard]] string_view GetValueDescription() const override;
+		[[nodiscard]] string_view GetValueDescription(bool useShortName) const;
 
 		bool SetValue(ControllerButtonCombo value);
 
@@ -740,11 +743,13 @@ struct PadmapperOptions : OptionCategoryBase {
 		ControllerButtonCombo boundInput {};
 		mutable GamepadLayout boundInputDescriptionType = GamepadLayout::Generic;
 		mutable std::string boundInputDescription;
+		mutable std::string boundInputShortDescription;
 		unsigned dynamicIndex;
 		std::string dynamicKey;
 		mutable std::string dynamicName;
 
 		void UpdateValueDescription() const;
+		string_view Shorten(string_view buttonName) const;
 
 		friend struct PadmapperOptions;
 	};
@@ -764,7 +769,7 @@ struct PadmapperOptions : OptionCategoryBase {
 	void ReleaseAllActiveButtons();
 	bool IsActive(string_view actionName) const;
 	string_view ActionNameTriggeredByButtonEvent(ControllerButtonEvent ctrlEvent) const;
-	string_view InputNameForAction(string_view actionName) const;
+	string_view InputNameForAction(string_view actionName, bool useShortName = false) const;
 	ControllerButtonCombo ButtonComboForAction(string_view actionName) const;
 
 private:
@@ -775,6 +780,7 @@ private:
 	bool committed = false;
 
 	const Action *FindAction(ControllerButton button) const;
+	bool CanDeferToMovementHandler(const Action &action) const;
 };
 
 struct Options {
