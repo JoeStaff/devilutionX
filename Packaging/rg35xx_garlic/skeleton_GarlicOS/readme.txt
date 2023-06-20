@@ -18,8 +18,8 @@ For the free shareware version:
 Controls - Changeable in Main Menu Settings
 --------
 - D-Pad: move
-- B: Attack nearest enemy, talk to NPC, pickup/place in inventory, OK in menus
-- A: select spell, back in menus
+- B: Select spell, back in menus
+- A: Attack nearest enemy, talk to NPC, pickup/place in inventory, OK in menus
 - Y: cast spell, delete character in main menu
 - X: pickup items, open chests and doors, use item in inventory
 - L1: use health item from belt
